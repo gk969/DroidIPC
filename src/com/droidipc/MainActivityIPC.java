@@ -153,6 +153,9 @@ public class MainActivityIPC extends Activity
 					fpsCalc.frmCnt=0;
 					fpsCalc.timeMs=curTimems;
 					//textLog.setText("FPS:"+fpsCalc.fps);
+
+					mCamView.mCamera.stopPreview();
+					
 				}
 			}
 			
@@ -319,7 +322,6 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		
 		
 		parameters.setPictureFormat(PixelFormat.JPEG);
-		//parameters.setPreviewFrameRate(25);
 		parameters.setPictureSize(prevSize.width, prevSize.height);//(picSize.width, picSize.height);
 		parameters.setPreviewSize(prevSize.width, prevSize.height);
 		parameters.setJpegQuality(100);
