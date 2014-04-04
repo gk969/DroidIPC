@@ -67,6 +67,7 @@ public class MainActivityIPC extends Activity
 	
 	private SurfaceView viewPalyback;
 	SurfaceHolder playbackHld;
+	palybackViewCB playViewCB;
 	
 	final int MSG_TIMER_FPS=1;
 	final int FPS_INTVAL=500;
@@ -108,10 +109,11 @@ public class MainActivityIPC extends Activity
 		viewPalyback=(SurfaceView)findViewById(R.id.SurfaceViewPlayback);
 		
 		playbackHld=viewPalyback.getHolder();
-		playbackHld.addCallback(new palybackViewCB());
+		playViewCB=new palybackViewCB();
+		playbackHld.addCallback(playViewCB);
 
-		textLog.setText(stringFromJNI());
-		textLog.setText("Wid:"+mCamView.prevSize.width+" height:"+mCamView.prevSize.height);
+		//textLog.setText(stringFromJNI());
+		//textLog.setText("Wid:"+mCamView.prevSize.width+" height:"+mCamView.prevSize.height);
 		
 		fpsCalc = new cFpsCalc();
 		
@@ -122,6 +124,7 @@ public class MainActivityIPC extends Activity
 				if(msg.what==MSG_TIMER_FPS)
 				{
 					textLog.setText("FPS:"+fpsCalc.fps);
+
 				}
 				super.handleMessage(msg);
 			}
@@ -134,6 +137,7 @@ public class MainActivityIPC extends Activity
 				Message message = new Message();
 				message.what = MSG_TIMER_FPS;      
 				mHandler.sendMessage(message);
+				playViewCB.drawBit();
 			}
 		};
 		
@@ -154,8 +158,8 @@ public class MainActivityIPC extends Activity
 					fpsCalc.timeMs=curTimems;
 					//textLog.setText("FPS:"+fpsCalc.fps);
 
-					mCamView.mCamera.stopPreview();
-					
+					cam.stopPreview();
+
 				}
 			}
 			
@@ -193,8 +197,8 @@ public class MainActivityIPC extends Activity
 		Log.i("DroidIPC", "onCreate");
 
 		// Create our Preview view and set it as the content of our activity.
-
-
+		
+		
 	}
 
 	public class AutoFocusCB implements AutoFocusCallback
@@ -235,37 +239,51 @@ public class MainActivityIPC extends Activity
 	}
 	
 
-	class palybackViewCB implements SurfaceHolder.Callback
-	{
-		@Override
-		public void surfaceChanged(SurfaceHolder holder, int format, int width, int height)
-		{
-			// TODO Auto-generated method stub
-			
-		}
 	
-		@Override
-		public void surfaceCreated(SurfaceHolder playbackHld)
-		{
-			// TODO Auto-generated method stub
-	
-			Canvas playbackCvs;
-			playbackCvs=playbackHld.lockCanvas();
-			playbackCvs.drawColor(Color.RED);
-			playbackHld.unlockCanvasAndPost(playbackCvs);
-		}
-	
-		@Override
-		public void surfaceDestroyed(SurfaceHolder holder)
-		{
-			// TODO Auto-generated method stub
-			
-		}
-		
-	}
 }
 
+class palybackViewCB implements SurfaceHolder.Callback
+{
+	SurfaceHolder hld;
+	int color=0;
+	
+	public void drawBit()
+	{
+		Canvas playbackCvs;
+		playbackCvs=hld.lockCanvas();
+		playbackCvs.drawColor(Color.rgb(color+=20, 0, 0));
+		hld.unlockCanvasAndPost(playbackCvs);
+	}
+	
+	
+	
+	@Override
+	public void surfaceChanged(SurfaceHolder holder, int format, int width, int height)
+	{
+		// TODO Auto-generated method stub
+		
+	}
 
+	@Override
+	public void surfaceCreated(SurfaceHolder playbackHld)
+	{
+		// TODO Auto-generated method stub
+		hld=playbackHld;
+		
+		Canvas playbackCvs;
+		playbackCvs=playbackHld.lockCanvas();
+		playbackCvs.drawColor(Color.rgb(255, 0, 0));
+		playbackHld.unlockCanvasAndPost(playbackCvs);
+	}
+
+	@Override
+	public void surfaceDestroyed(SurfaceHolder holder)
+	{
+		// TODO Auto-generated method stub
+		
+	}
+	
+}
 // ----------------------------------------------------------------------
 
 class CamView extends SurfaceView implements SurfaceHolder.Callback
