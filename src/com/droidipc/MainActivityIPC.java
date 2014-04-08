@@ -67,7 +67,7 @@ public class MainActivityIPC extends Activity
 	
 	private SurfaceView viewPalyback;
 	SurfaceHolder playbackHld;
-	palybackViewCB playViewCB;
+	PlaybackViewCB playViewCB;
 	
 	final int MSG_TIMER_FPS=1;
 	final int FPS_INTVAL=500;
@@ -107,12 +107,15 @@ public class MainActivityIPC extends Activity
 		framePreview.addView(mCamView);
 
 		viewPalyback=(SurfaceView)findViewById(R.id.SurfaceViewPlayback);
-		
 		playbackHld=viewPalyback.getHolder();
-		playViewCB=new palybackViewCB();
+		
+		viewPalyback.setZOrderOnTop(true);
+		playbackHld.setFormat(PixelFormat.TRANSPARENT);
+		
+		playViewCB=new PlaybackViewCB(viewPalyback);
 		playbackHld.addCallback(playViewCB);
 
-		//textLog.setText(stringFromJNI());
+		textLog.setText(stringFromJNI());
 		//textLog.setText("Wid:"+mCamView.prevSize.width+" height:"+mCamView.prevSize.height);
 		
 		fpsCalc = new cFpsCalc();
@@ -137,7 +140,6 @@ public class MainActivityIPC extends Activity
 				Message message = new Message();
 				message.what = MSG_TIMER_FPS;      
 				mHandler.sendMessage(message);
-				playViewCB.drawBit();
 			}
 		};
 		
@@ -158,8 +160,7 @@ public class MainActivityIPC extends Activity
 					fpsCalc.timeMs=curTimems;
 					//textLog.setText("FPS:"+fpsCalc.fps);
 
-					cam.stopPreview();
-
+					playViewCB.drawBit(data);
 				}
 			}
 			
@@ -242,17 +243,32 @@ public class MainActivityIPC extends Activity
 	
 }
 
-class palybackViewCB implements SurfaceHolder.Callback
+class PlaybackViewCB implements SurfaceHolder.Callback
 {
-	SurfaceHolder hld;
-	int color=0;
+	private SurfaceHolder hld;
+	private int color=0;
+	private boolean surfaceIsValid=false;
+	private Bitmap mBitmap;
+	private SurfaceView mView;
+
+	private static native void  OnPreviewFrame(byte[] data, int width, int height);
+    
+    public PlaybackViewCB(SurfaceView view)
+    {
+    	mView=view;
+    }
 	
-	public void drawBit()
+	public void drawBit(byte[] data)
 	{
-		Canvas playbackCvs;
-		playbackCvs=hld.lockCanvas();
-		playbackCvs.drawColor(Color.rgb(color+=20, 0, 0));
-		hld.unlockCanvasAndPost(playbackCvs);
+		if(surfaceIsValid)
+		{
+			Canvas playbackCvs;
+			playbackCvs=hld.lockCanvas();
+			playbackCvs.drawColor(Color.rgb(color+=20, 0, 0));
+			hld.unlockCanvasAndPost(playbackCvs);
+			//Log.i("PlaybackViewCB", "frame data size:"+data.length); 
+			OnPreviewFrame(data, mView.getWidth(), mView.getHeight());
+		}
 	}
 	
 	
@@ -269,18 +285,19 @@ class palybackViewCB implements SurfaceHolder.Callback
 	{
 		// TODO Auto-generated method stub
 		hld=playbackHld;
+		surfaceIsValid=true;
 		
-		Canvas playbackCvs;
-		playbackCvs=playbackHld.lockCanvas();
-		playbackCvs.drawColor(Color.rgb(255, 0, 0));
-		playbackHld.unlockCanvasAndPost(playbackCvs);
+		int width=mView.getWidth();
+		int height=mView.getHeight();
+    	mBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
+    	Log.i("palyback View Size", "width:"+width+" height:"+height); 
 	}
 
 	@Override
 	public void surfaceDestroyed(SurfaceHolder holder)
 	{
 		// TODO Auto-generated method stub
-		
+		surfaceIsValid=false;
 	}
 	
 }
