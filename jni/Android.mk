@@ -18,5 +18,6 @@ include $(CLEAR_VARS)
 
 LOCAL_MODULE    := ffmpeg-jni
 LOCAL_SRC_FILES := ffmpeg-jni.c
+LOCAL_LDLIBS    := -lm -llog
 
 include $(BUILD_SHARED_LIBRARY)

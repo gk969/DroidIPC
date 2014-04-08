@@ -16,6 +16,12 @@
  */
 #include <string.h>
 #include <jni.h>
+#include <android/log.h>
+//#include <android/bitmap.h>
+
+#define  LOG_TAG    "jni-libFfmpeg"
+#define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
+#define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
 
 /* This is a trivial JNI example where we use a native method
  * to return a new VM String. See the corresponding Java source
@@ -47,3 +53,28 @@ Java_com_droidipc_MainActivityIPC_stringFromJNI( JNIEnv* env,
 
     return (*env)->NewStringUTF(env, "test jni !  Compiled with ABI " ABI ".");
 }
+
+void NV21toRGB565(jbyte *nv21, jbyte *rgb565, jint width, jint height)
+{
+
+}
+
+void
+Java_com_droidipc_PlaybackViewCB_OnPreviewFrame( JNIEnv* env, jobject thiz, jbyteArray jbuf, jint width, jint height)
+{
+
+	jbyte *buf=(*env)->GetByteArrayElements(env, jbuf, NULL);
+	if(buf==NULL)
+	{
+		LOGI("JNI:GetbyteArrayElements Fail!");
+		return;
+	}
+	//LOGI("surface width:%d height:%d", width, height);
+	//LOGI("ArrayElement size: %d", (*env)->GetArrayLength(env, jbuf));
+
+	(*env)->ReleaseByteArrayElements(env, jbuf, buf,0);
+
+}
+
+
+
