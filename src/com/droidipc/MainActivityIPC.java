@@ -160,7 +160,7 @@ public class MainActivityIPC extends Activity
 					fpsCalc.timeMs=curTimems;
 					//textLog.setText("FPS:"+fpsCalc.fps);
 
-					playViewCB.drawBit(data);
+					playViewCB.drawBit(data, mCamView);
 				}
 			}
 			
@@ -250,15 +250,23 @@ class PlaybackViewCB implements SurfaceHolder.Callback
 	private boolean surfaceIsValid=false;
 	private Bitmap mBitmap;
 	private SurfaceView mView;
-
-	private static native void  OnPreviewFrame(byte[] data, int width, int height);
+	
+	
+	private int[] picSize;
+	final int isrcWid=0;
+	final int isrchei=1;
+	final int itarWid=2;
+	final int itarHei=3;
+	
+	private static native void  OnPreviewFrame(byte[] data, int[] picSize);
     
     public PlaybackViewCB(SurfaceView view)
     {
     	mView=view;
+    	picSize=new int[4];
     }
 	
-	public void drawBit(byte[] data)
+	public void drawBit(byte[] data, SurfaceView srcView)
 	{
 		if(surfaceIsValid)
 		{
@@ -266,8 +274,11 @@ class PlaybackViewCB implements SurfaceHolder.Callback
 			playbackCvs=hld.lockCanvas();
 			playbackCvs.drawColor(Color.rgb(color+=20, 0, 0));
 			hld.unlockCanvasAndPost(playbackCvs);
+			
+			picSize[isrcWid]=srcView.getWidth();
+			picSize[isrchei]=srcView.getHeight();
 			//Log.i("PlaybackViewCB", "frame data size:"+data.length); 
-			OnPreviewFrame(data, mView.getWidth(), mView.getHeight());
+			OnPreviewFrame(data, picSize);
 		}
 	}
 	
@@ -287,8 +298,10 @@ class PlaybackViewCB implements SurfaceHolder.Callback
 		hld=playbackHld;
 		surfaceIsValid=true;
 		
-		int width=mView.getWidth();
-		int height=mView.getHeight();
+		int width=mView.getWidth()&0xFFFFFFFC;
+		int height=mView.getHeight()&0xFFFFFFFC;
+		picSize[itarWid]=width;
+		picSize[itarHei]=height;
     	mBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
     	Log.i("palyback View Size", "width:"+width+" height:"+height); 
 	}

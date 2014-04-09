@@ -54,26 +54,38 @@ Java_com_droidipc_MainActivityIPC_stringFromJNI( JNIEnv* env,
     return (*env)->NewStringUTF(env, "test jni !  Compiled with ABI " ABI ".");
 }
 
+
+typedef struct
+{
+	int srcWid;
+	int srcHei;
+	int tarWid;
+	int tarHei;
+}t_picSize;
+
+
 void NV21toRGB565(jbyte *nv21, jbyte *rgb565, jint width, jint height)
 {
 
 }
 
-void
-Java_com_droidipc_PlaybackViewCB_OnPreviewFrame( JNIEnv* env, jobject thiz, jbyteArray jbuf, jint width, jint height)
+void Java_com_droidipc_PlaybackViewCB_OnPreviewFrame( JNIEnv* env, jobject thiz, jbyteArray jbuf, jintArray jPicSize)
 {
-
+	t_picSize *picSize=(t_picSize*)((*env)->GetByteArrayElements(env, jPicSize, NULL));
 	jbyte *buf=(*env)->GetByteArrayElements(env, jbuf, NULL);
-	if(buf==NULL)
+
+	if((picSize==NULL)||(buf==NULL))
 	{
 		LOGI("JNI:GetbyteArrayElements Fail!");
 		return;
 	}
-	//LOGI("surface width:%d height:%d", width, height);
+
+	LOGI("surface width:%d height:%d", picSize->srcWid, picSize->srcHei);
+	LOGI("bitmap width:%d height:%d", picSize->tarWid, picSize->tarHei);
 	//LOGI("ArrayElement size: %d", (*env)->GetArrayLength(env, jbuf));
 
+	(*env)->ReleaseByteArrayElements(env, jPicSize, (int*)picSize,0);
 	(*env)->ReleaseByteArrayElements(env, jbuf, buf,0);
-
 }
 
 

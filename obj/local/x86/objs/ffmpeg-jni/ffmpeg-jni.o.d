@@ -1,23 +1,23 @@
-H:/android/DroidIPC//obj/local/x86/objs/ffmpeg-jni/ffmpeg-jni.o: \
- H:/android/DroidIPC//jni/ffmpeg-jni.c \
- G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/string.h \
- G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/sys/cdefs.h \
- G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/sys/cdefs_elf.h \
- G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/android/api-level.h \
- G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/malloc.h \
- G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/jni.h \
- G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/android/log.h
+E:/Android/DroidIPC//obj/local/x86/objs/ffmpeg-jni/ffmpeg-jni.o: \
+ E:/Android/DroidIPC//jni/ffmpeg-jni.c \
+ D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/string.h \
+ D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/sys/cdefs.h \
+ D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/sys/cdefs_elf.h \
+ D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/android/api-level.h \
+ D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/malloc.h \
+ D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/jni.h \
+ D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/android/log.h
 
-G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/string.h:
+D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/string.h:
 
-G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/sys/cdefs.h:
+D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/sys/cdefs.h:
 
-G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/sys/cdefs_elf.h:
+D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/sys/cdefs_elf.h:
 
-G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/android/api-level.h:
+D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/android/api-level.h:
 
-G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/malloc.h:
+D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/malloc.h:
 
-G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/jni.h:
+D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/jni.h:
 
-G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/android/log.h:
+D:/软件/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/android/log.h:
