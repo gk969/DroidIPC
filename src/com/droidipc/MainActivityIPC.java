@@ -255,30 +255,36 @@ class PlaybackViewCB implements SurfaceHolder.Callback
 	private int[] picSize;
 	final int isrcWid=0;
 	final int isrchei=1;
-	final int itarWid=2;
-	final int itarHei=3;
+	final int itop=2;
+	final int ileft=3;
+	final int itarWid=4;
+	final int itarHei=5;
 	
-	private static native void  OnPreviewFrame(byte[] data, int[] picSize);
+	private static native boolean  OnPreviewFrame(byte[] data, int[] picSize);
     
     public PlaybackViewCB(SurfaceView view)
     {
     	mView=view;
-    	picSize=new int[4];
+    	picSize=new int[6];
+    	picSize[itop]=0;
+    	picSize[ileft]=0;
     }
 	
 	public void drawBit(byte[] data, SurfaceView srcView)
 	{
 		if(surfaceIsValid)
 		{
-			Canvas playbackCvs;
-			playbackCvs=hld.lockCanvas();
-			playbackCvs.drawColor(Color.rgb(color+=20, 0, 0));
-			hld.unlockCanvasAndPost(playbackCvs);
-			
 			picSize[isrcWid]=srcView.getWidth();
 			picSize[isrchei]=srcView.getHeight();
+			
 			//Log.i("PlaybackViewCB", "frame data size:"+data.length); 
-			OnPreviewFrame(data, picSize);
+			if(OnPreviewFrame(data, picSize))
+			{
+				Canvas playbackCvs;
+				playbackCvs=hld.lockCanvas();
+				playbackCvs.drawColor(Color.rgb(color+=20, 0, 0));
+				hld.unlockCanvasAndPost(playbackCvs);
+			}
 		}
 	}
 	

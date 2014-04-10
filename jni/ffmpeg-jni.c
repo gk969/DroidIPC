@@ -16,6 +16,7 @@
  */
 #include <string.h>
 #include <jni.h>
+#include <malloc.h>
 #include <android/log.h>
 //#include <android/bitmap.h>
 
@@ -59,33 +60,84 @@ typedef struct
 {
 	int srcWid;
 	int srcHei;
+	int top;
+	int left;
 	int tarWid;
 	int tarHei;
 }t_picSize;
 
 
-void NV21toRGB565(jbyte *nv21, jbyte *rgb565, jint width, jint height)
+void NV21toRGB565(jbyte *nv21, jbyte *rgb565, t_picSize *picSize)
 {
+	int w,h,wp,hp;
+	int r,g,b;
 
+	picSize->top&=0xFFFFFFFC;
+	picSize->left&=0xFFFFFFFC;
+
+	for(h=0; h<picSize->tarHei; h+=4)
+	{
+		int hBase=h*picSize->tarWid;		//plane height base addr
+		int
+		for(w=0; w<picSize->tarWid; w+=4)
+		{
+			int pBase=hBase+w;				//plane base addr
+			for(hp=0; hp<4; hp++)
+			{
+				int hPos=pBase+hp*4;		//pix height addr in plane
+				for(wp=0; wp<4; wp++)
+				{
+					int pPos=(hPos+wp)*2;	//pix addr in plane
+
+					rgb565[pPos]=
+					rgb565[pPos+1]=
+				}
+			}
+		}
+	}
 }
 
-void Java_com_droidipc_PlaybackViewCB_OnPreviewFrame( JNIEnv* env, jobject thiz, jbyteArray jbuf, jintArray jPicSize)
+jboolean Java_com_droidipc_PlaybackViewCB_OnPreviewFrame(JNIEnv* env, jobject thiz, jbyteArray jbuf, jintArray jPicSize)
 {
 	t_picSize *picSize=(t_picSize*)((*env)->GetByteArrayElements(env, jPicSize, NULL));
-	jbyte *buf=(*env)->GetByteArrayElements(env, jbuf, NULL);
+	jbyte *nv21=(*env)->GetByteArrayElements(env, jbuf, NULL);
 
-	if((picSize==NULL)||(buf==NULL))
+	int rgb565BufSize;
+	jbyte *rgb565;
+
+	if(((picSize->top|picSize->left|picSize->srcWid|picSize->srcHei&0x03)!=0)||
+	   ((picSize->top+picSize->tarHei)>picSize->srcHei)||
+	   ((picSize->left+picSize->tarWid)>picSize->srcWid))
 	{
-		LOGI("JNI:GetbyteArrayElements Fail!");
-		return;
+		LOGI("Size or Pos Error!");
+		return JNI_FALSE;
 	}
 
-	LOGI("surface width:%d height:%d", picSize->srcWid, picSize->srcHei);
-	LOGI("bitmap width:%d height:%d", picSize->tarWid, picSize->tarHei);
+	rgb565BufSize=picSize->tarWid*picSize->tarHei*2;
+	rgb565=malloc(rgb565BufSize);
+	if(rgb565==NULL)
+	{
+		LOGI("malloc(%d) Fail!", rgb565BufSize);
+		return JNI_FALSE;
+	}
+	LOGI("malloc(%d) success!", rgb565BufSize);
+
+	if((picSize==NULL)||(nv21==NULL))
+	{
+		LOGI("GetbyteArrayElements Fail!");
+		return JNI_FALSE;
+	}
+	NV21toRGB565(nv21, rgb565, picSize);
+
+	//LOGI("surface width:%d height:%d", picSize->srcWid, picSize->srcHei);
+	//LOGI("bitmap width:%d height:%d", picSize->tarWid, picSize->tarHei);
 	//LOGI("ArrayElement size: %d", (*env)->GetArrayLength(env, jbuf));
 
+
+	free(rgb565);
 	(*env)->ReleaseByteArrayElements(env, jPicSize, (int*)picSize,0);
-	(*env)->ReleaseByteArrayElements(env, jbuf, buf,0);
+	(*env)->ReleaseByteArrayElements(env, jbuf, nv21,0);
+	return JNI_TRUE;
 }
 
 
