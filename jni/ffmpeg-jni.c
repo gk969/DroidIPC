@@ -67,10 +67,12 @@ typedef struct
 }t_picSize;
 
 
-void NV21toRGB565(jbyte *nv21, jbyte *rgb565, t_picSize *picSize)
+void NV21toRGB(jbyte *nv21, jint *rgb, t_picSize *picSize)
 {
 	int w,h,wp,hp;
 	int r,g,b;
+
+	int tarbase=picSize->top*picSize->srcWid+picSize->left;
 
 	picSize->top&=0xFFFFFFFC;
 	picSize->left&=0xFFFFFFFC;
@@ -78,34 +80,45 @@ void NV21toRGB565(jbyte *nv21, jbyte *rgb565, t_picSize *picSize)
 	for(h=0; h<picSize->tarHei; h+=4)
 	{
 		int hBase=h*picSize->tarWid;		//plane height base addr
-		int
+		int srcHbase=tarbase+h*picSize->srcWid;
 		for(w=0; w<picSize->tarWid; w+=4)
 		{
 			int pBase=hBase+w;				//plane base addr
+			int srcPbase=(srcHbase+w)/2*3;
 			for(hp=0; hp<4; hp++)
 			{
 				int hPos=pBase+hp*4;		//pix height addr in plane
+				int srcHYpos=srcPbase+hp*4;
 				for(wp=0; wp<4; wp++)
 				{
-					int pPos=(hPos+wp)*2;	//pix addr in plane
+					int pPos=hPos+wp;	//pix addr in plane
+					unsigned char srcY=nv21[srcHYpos+wp];
+					r=g=b=srcY;
 
-					rgb565[pPos]=
-					rgb565[pPos+1]=
+					*(rgb+pPos)=0xFF000000|(r<<16)|(g<<8)|b;
 				}
 			}
 		}
 	}
 }
 
-jboolean Java_com_droidipc_PlaybackViewCB_OnPreviewFrame(JNIEnv* env, jobject thiz, jbyteArray jbuf, jintArray jPicSize)
+jboolean Java_com_droidipc_PlaybackViewCB_OnPreviewFrame(JNIEnv* env, jobject thiz, jbyteArray jnv21, jintArray jrgb, jintArray jPicSize)
 {
+	jbyte *nv21=(*env)->GetByteArrayElements(env, jnv21, NULL);
+	jint *rgb=(*env)->GetIntArrayElements(env, jrgb, NULL);
 	t_picSize *picSize=(t_picSize*)((*env)->GetByteArrayElements(env, jPicSize, NULL));
-	jbyte *nv21=(*env)->GetByteArrayElements(env, jbuf, NULL);
 
-	int rgb565BufSize;
-	jbyte *rgb565;
+	if((nv21==NULL)||(rgb==NULL)||(picSize==NULL))
+	{
+		LOGI("GetbyteArrayElements Fail!");
+		return JNI_FALSE;
+	}
 
-	if(((picSize->top|picSize->left|picSize->srcWid|picSize->srcHei&0x03)!=0)||
+	//LOGI("surface width:%d height:%d", picSize->srcWid, picSize->srcHei);
+	//LOGI("bitmap width:%d height:%d", picSize->tarWid, picSize->tarHei);
+	LOGI("pos top:%d left:%d", picSize->top, picSize->left);
+
+	if((((picSize->srcWid|picSize->srcHei)&0x03)!=0)||
 	   ((picSize->top+picSize->tarHei)>picSize->srcHei)||
 	   ((picSize->left+picSize->tarWid)>picSize->srcWid))
 	{
@@ -113,30 +126,15 @@ jboolean Java_com_droidipc_PlaybackViewCB_OnPreviewFrame(JNIEnv* env, jobject th
 		return JNI_FALSE;
 	}
 
-	rgb565BufSize=picSize->tarWid*picSize->tarHei*2;
-	rgb565=malloc(rgb565BufSize);
-	if(rgb565==NULL)
-	{
-		LOGI("malloc(%d) Fail!", rgb565BufSize);
-		return JNI_FALSE;
-	}
-	LOGI("malloc(%d) success!", rgb565BufSize);
+/**/
 
-	if((picSize==NULL)||(nv21==NULL))
-	{
-		LOGI("GetbyteArrayElements Fail!");
-		return JNI_FALSE;
-	}
-	NV21toRGB565(nv21, rgb565, picSize);
+	NV21toRGB(nv21, rgb, picSize);
 
-	//LOGI("surface width:%d height:%d", picSize->srcWid, picSize->srcHei);
-	//LOGI("bitmap width:%d height:%d", picSize->tarWid, picSize->tarHei);
 	//LOGI("ArrayElement size: %d", (*env)->GetArrayLength(env, jbuf));
 
-
-	free(rgb565);
-	(*env)->ReleaseByteArrayElements(env, jPicSize, (int*)picSize,0);
-	(*env)->ReleaseByteArrayElements(env, jbuf, nv21,0);
+	(*env)->ReleaseByteArrayElements(env, jnv21, nv21, 0);
+	(*env)->ReleaseIntArrayElements(env, jrgb, rgb, 0);
+	(*env)->ReleaseIntArrayElements(env, jPicSize, (int*)picSize, 0);
 	return JNI_TRUE;
 }
 

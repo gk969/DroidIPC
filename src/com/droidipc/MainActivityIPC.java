@@ -160,8 +160,8 @@ public class MainActivityIPC extends Activity
 					fpsCalc.timeMs=curTimems;
 					//textLog.setText("FPS:"+fpsCalc.fps);
 
-					playViewCB.drawBit(data, mCamView);
 				}
+				playViewCB.drawBit(data, mCamView);
 			}
 			
 		});
@@ -253,37 +253,43 @@ class PlaybackViewCB implements SurfaceHolder.Callback
 	
 	
 	private int[] picSize;
+	private int[] rgb;
 	final int isrcWid=0;
-	final int isrchei=1;
+	final int isrcHei=1;
 	final int itop=2;
 	final int ileft=3;
 	final int itarWid=4;
 	final int itarHei=5;
 	
-	private static native boolean  OnPreviewFrame(byte[] data, int[] picSize);
+	private static native boolean  OnPreviewFrame(byte[] nv21, int[] rgb, int[] picSize);
     
     public PlaybackViewCB(SurfaceView view)
     {
     	mView=view;
     	picSize=new int[6];
-    	picSize[itop]=0;
-    	picSize[ileft]=0;
     }
 	
-	public void drawBit(byte[] data, SurfaceView srcView)
+	public void drawBit(byte[] nv21, SurfaceView srcView)
 	{
 		if(surfaceIsValid)
 		{
 			picSize[isrcWid]=srcView.getWidth();
-			picSize[isrchei]=srcView.getHeight();
-			
+			picSize[isrcHei]=srcView.getHeight();
+	    	picSize[itop]=0;// picSize[isrcHei]/2;
+	    	picSize[ileft]=0;
 			//Log.i("PlaybackViewCB", "frame data size:"+data.length); 
-			if(OnPreviewFrame(data, picSize))
+			if(OnPreviewFrame(nv21, rgb, picSize))
 			{
-				Canvas playbackCvs;
-				playbackCvs=hld.lockCanvas();
-				playbackCvs.drawColor(Color.rgb(color+=20, 0, 0));
-				hld.unlockCanvasAndPost(playbackCvs);
+				Log.i("PlaybackViewCB", "rgb length:"+rgb.length); 
+				mBitmap.setPixels(rgb, 0, picSize[itarWid], 0, 0, picSize[itarWid], picSize[itarHei]);
+				if(mBitmap!=null)
+				{
+					Canvas playbackCvs;
+					playbackCvs=hld.lockCanvas();
+					//playbackCvs.drawColor(Color.rgb(color+=20, 0, 0));
+					playbackCvs.drawBitmap(mBitmap, 0, 0, null);
+					hld.unlockCanvasAndPost(playbackCvs);
+				}
 			}
 		}
 	}
@@ -308,6 +314,7 @@ class PlaybackViewCB implements SurfaceHolder.Callback
 		int height=mView.getHeight()&0xFFFFFFFC;
 		picSize[itarWid]=width;
 		picSize[itarHei]=height;
+		rgb=new int[width*height];
     	mBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
     	Log.i("palyback View Size", "width:"+width+" height:"+height); 
 	}
