@@ -6,7 +6,8 @@ H:/android/DroidIPC//obj/local/x86/objs/ffmpeg-jni/ffmpeg-jni.o: \
  G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/android/api-level.h \
  G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/malloc.h \
  G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/jni.h \
- G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/android/log.h
+ G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/android/log.h \
+ H:/android/DroidIPC//jni/typeDef.h
 
 G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/string.h:
 
@@ -21,3 +22,5 @@ G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/mall
 G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/jni.h:
 
 G:/Develop/android/android-ndk-r9d/platforms/android-9/arch-x86/usr/include/android/log.h:
+
+H:/android/DroidIPC//jni/typeDef.h:

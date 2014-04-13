@@ -275,7 +275,7 @@ class PlaybackViewCB implements SurfaceHolder.Callback
 		{
 			picSize[isrcWid]=srcView.getWidth();
 			picSize[isrcHei]=srcView.getHeight();
-	    	picSize[itop]=0;// picSize[isrcHei]/2;
+	    	picSize[itop]=picSize[isrcHei]/2;
 	    	picSize[ileft]=0;
 			//Log.i("PlaybackViewCB", "frame data size:"+data.length); 
 			if(OnPreviewFrame(nv21, rgb, picSize))
@@ -310,8 +310,8 @@ class PlaybackViewCB implements SurfaceHolder.Callback
 		hld=playbackHld;
 		surfaceIsValid=true;
 		
-		int width=mView.getWidth()&0xFFFFFFFC;
-		int height=mView.getHeight()&0xFFFFFFFC;
+		int width=mView.getWidth()&0xFFFFFFFE;
+		int height=mView.getHeight()&0xFFFFFFFE;
 		picSize[itarWid]=width;
 		picSize[itarHei]=height;
 		rgb=new int[width*height];

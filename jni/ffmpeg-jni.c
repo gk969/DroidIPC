@@ -20,6 +20,9 @@
 #include <android/log.h>
 //#include <android/bitmap.h>
 
+#include "typeDef.h"
+
+
 #define  LOG_TAG    "jni-libFfmpeg"
 #define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
@@ -67,45 +70,32 @@ typedef struct
 }t_picSize;
 
 
-void NV21toRGB(jbyte *nv21, jint *rgb, t_picSize *picSize)
+void NV21toRGB(u8 *nv21,u32 *rgb, t_picSize *picSize)
 {
-	int w,h,wp,hp;
-	int r,g,b;
+	int w,h;
 
-	int tarbase=picSize->top*picSize->srcWid+picSize->left;
-
-	picSize->top&=0xFFFFFFFC;
-	picSize->left&=0xFFFFFFFC;
-
-	for(h=0; h<picSize->tarHei; h+=4)
+	for(h=0; h<picSize->tarHei; h++)
 	{
-		int hBase=h*picSize->tarWid;		//plane height base addr
-		int srcHbase=tarbase+h*picSize->srcWid;
-		for(w=0; w<picSize->tarWid; w+=4)
+		int hBase=h*picSize->tarWid;
+		int srcHbase=(picSize->top+h)*picSize->srcWid;
+		for(w=0; w<picSize->tarWid; w++)
 		{
-			int pBase=hBase+w;				//plane base addr
-			int srcPbase=(srcHbase+w)/2*3;
-			for(hp=0; hp<4; hp++)
-			{
-				int hPos=pBase+hp*4;		//pix height addr in plane
-				int srcHYpos=srcPbase+hp*4;
-				for(wp=0; wp<4; wp++)
-				{
-					int pPos=hPos+wp;	//pix addr in plane
-					unsigned char srcY=nv21[srcHYpos+wp];
-					r=g=b=srcY;
+			int Addr=hBase+w;
+			int srcAddr=srcHbase+w;
+			u32 r,g,b;
 
-					*(rgb+pPos)=0xFF000000|(r<<16)|(g<<8)|b;
-				}
-			}
+			u8 srcY=nv21[srcAddr];
+			r=g=b=srcY;
+
+			rgb[Addr]=0xFF000000|(r<<16)|(g<<8)|b;
 		}
 	}
 }
 
 jboolean Java_com_droidipc_PlaybackViewCB_OnPreviewFrame(JNIEnv* env, jobject thiz, jbyteArray jnv21, jintArray jrgb, jintArray jPicSize)
 {
-	jbyte *nv21=(*env)->GetByteArrayElements(env, jnv21, NULL);
-	jint *rgb=(*env)->GetIntArrayElements(env, jrgb, NULL);
+	u8 *nv21=(*env)->GetByteArrayElements(env, jnv21, NULL);
+	u32 *rgb=(*env)->GetIntArrayElements(env, jrgb, NULL);
 	t_picSize *picSize=(t_picSize*)((*env)->GetByteArrayElements(env, jPicSize, NULL));
 
 	if((nv21==NULL)||(rgb==NULL)||(picSize==NULL))
@@ -116,10 +106,9 @@ jboolean Java_com_droidipc_PlaybackViewCB_OnPreviewFrame(JNIEnv* env, jobject th
 
 	//LOGI("surface width:%d height:%d", picSize->srcWid, picSize->srcHei);
 	//LOGI("bitmap width:%d height:%d", picSize->tarWid, picSize->tarHei);
-	LOGI("pos top:%d left:%d", picSize->top, picSize->left);
+	//LOGI("pos top:%d left:%d", picSize->top, picSize->left);
 
-	if((((picSize->srcWid|picSize->srcHei)&0x03)!=0)||
-	   ((picSize->top+picSize->tarHei)>picSize->srcHei)||
+	if(((picSize->top+picSize->tarHei)>picSize->srcHei)||
 	   ((picSize->left+picSize->tarWid)>picSize->srcWid))
 	{
 		LOGI("Size or Pos Error!");
@@ -129,6 +118,22 @@ jboolean Java_com_droidipc_PlaybackViewCB_OnPreviewFrame(JNIEnv* env, jobject th
 /**/
 
 	NV21toRGB(nv21, rgb, picSize);
+
+	/*
+	{
+		int i;
+		int pix=0;
+		int size=(*env)->GetArrayLength(env, jrgb);
+		for(i=0; i<size; i++)
+		{
+			if(rgb[i]!=pix)
+			{
+				pix=rgb[i];
+				LOGI("diff @rgb[%d]=%08X", i, pix);
+			}
+		}
+	}
+	*/
 
 	//LOGI("ArrayElement size: %d", (*env)->GetArrayLength(env, jbuf));
 
