@@ -72,20 +72,28 @@ typedef struct
 
 void NV21toRGB(u8 *nv21,u32 *rgb, t_picSize *picSize)
 {
-	int w,h;
+	u32 w,h;
+	u32 uvOfs=picSize->srcWid*picSize->srcHei;
 
 	for(h=0; h<picSize->tarHei; h++)
 	{
-		int hBase=h*picSize->tarWid;
-		int srcHbase=(picSize->top+h)*picSize->srcWid;
+		u32 hBase=h*picSize->tarWid;
+		u32 srcYbase=(picSize->top+h)*picSize->srcWid+picSize->left;
+		u32 srcUVbase=(picSize->top+h)/2*picSize->srcWid+picSize->left+uvOfs;
 		for(w=0; w<picSize->tarWid; w++)
 		{
-			int Addr=hBase+w;
-			int srcAddr=srcHbase+w;
-			u32 r,g,b;
+			u32 Addr=hBase+w;
+			u32 srcYaddr=srcYbase+w;
+			u32 srcUVaddr=srcUVbase+w;
+			s32 y,u,v;
+			s32 r,g,b;
+			y=nv21[srcYaddr];
+			u=nv21[srcUVaddr+1];
+			v=nv21[srcUVaddr];
 
-			u8 srcY=nv21[srcAddr];
-			r=g=b=srcY;
+			r=y+1.13983*(v-128);
+			g=y-0.39465*(u-128)-0.58060*(v-128);
+			b=y+2.03211*(u-128);
 
 			rgb[Addr]=0xFF000000|(r<<16)|(g<<8)|b;
 		}
