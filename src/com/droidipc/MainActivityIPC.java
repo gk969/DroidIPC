@@ -6,9 +6,11 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.util.Log;
 import android.view.Menu;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.CompressFormat;
 import android.graphics.BitmapFactory;
@@ -103,6 +105,19 @@ public class MainActivityIPC extends Activity
 		FrameLayout framePreview = (FrameLayout) findViewById(R.id.frameViewCam);
 		
 		mCamView = new CamView(this, textLog);
+		if(mCamView.mCamera==null)
+		{
+			new AlertDialog.Builder(this)
+            .setTitle("无法打开后置摄像头!")
+            .setMessage("相机故障 ")
+            .setPositiveButton("确定", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int whichButton) {
+                	this.finish();
+                }
+            })
+            .create();
+		}
+		
 		framePreview.addView(mCamView);
 
 		viewPalyback=(SurfaceView)findViewById(R.id.SurfaceViewPlayback);
@@ -350,6 +365,12 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		textLog=txtLog;
 		
 		mCamera = Camera.open();
+		
+		if(mCamera==null)
+		{
+			return;
+		}
+		
 		Camera.Parameters parameters = mCamera.getParameters();
 		List<Camera.Size> PictureSizes=parameters.getSupportedPictureSizes();
 		
@@ -533,10 +554,13 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	{
 		// Now that the size is known, set up the camera parameters and begin
 		// the preview.
-		Camera.Parameters parameters = mCamera.getParameters();
-		parameters.setPreviewSize(w, h);
-		Log.i("DroidIPC", "surfaceChanged format:"+format+" size:"+w+","+h); 
-		mCamera.setParameters(parameters);
-		mCamera.startPreview();
+		if(mCamera!=null)
+		{
+			Camera.Parameters parameters = mCamera.getParameters();
+			parameters.setPreviewSize(w, h);
+			Log.i("DroidIPC", "surfaceChanged format:"+format+" size:"+w+","+h); 
+			mCamera.setParameters(parameters);
+			mCamera.startPreview();
+		}
 	}
 }
