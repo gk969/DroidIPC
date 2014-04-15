@@ -5,7 +5,6 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.util.Log;
 import android.view.Menu;
@@ -278,6 +277,7 @@ class PlaybackViewCB implements SurfaceHolder.Callback
 	    	picSize[itop]=picSize[isrcHei]/2;
 	    	picSize[ileft]=0;
 			//Log.i("PlaybackViewCB", "frame data size:"+data.length); 
+	    	
 			if(OnPreviewFrame(nv21, rgb, picSize))
 			{
 				Log.i("PlaybackViewCB", "rgb length:"+rgb.length); 
@@ -291,6 +291,7 @@ class PlaybackViewCB implements SurfaceHolder.Callback
 					hld.unlockCanvasAndPost(playbackCvs);
 				}
 			}
+			
 		}
 	}
 	

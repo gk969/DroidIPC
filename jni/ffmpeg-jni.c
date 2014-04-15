@@ -85,15 +85,19 @@ void NV21toRGB(u8 *nv21,u32 *rgb, t_picSize *picSize)
 			u32 Addr=hBase+w;
 			u32 srcYaddr=srcYbase+w;
 			u32 srcUVaddr=srcUVbase+w;
-			s32 y,u,v;
-			s32 r,g,b;
+			u8 y,u,v;
+			u8 r,g,b;
 			y=nv21[srcYaddr];
-			u=nv21[srcUVaddr+1];
 			v=nv21[srcUVaddr];
+			u=nv21[srcUVaddr+1];
 
-			r=y+1.13983*(v-128);
-			g=y-0.39465*(u-128)-0.58060*(v-128);
-			b=y+2.03211*(u-128);
+
+			r=y+1.4075*(v-128);
+			g=y-0.3455*(u-128)-0.7196*(v-128);
+			b=y+1.779*(u-128);
+
+
+			//r=g=b=(w+h)/2;
 
 			rgb[Addr]=0xFF000000|(r<<16)|(g<<8)|b;
 		}
@@ -126,22 +130,6 @@ jboolean Java_com_droidipc_PlaybackViewCB_OnPreviewFrame(JNIEnv* env, jobject th
 /**/
 
 	NV21toRGB(nv21, rgb, picSize);
-
-	/*
-	{
-		int i;
-		int pix=0;
-		int size=(*env)->GetArrayLength(env, jrgb);
-		for(i=0; i<size; i++)
-		{
-			if(rgb[i]!=pix)
-			{
-				pix=rgb[i];
-				LOGI("diff @rgb[%d]=%08X", i, pix);
-			}
-		}
-	}
-	*/
 
 	//LOGI("ArrayElement size: %d", (*env)->GetArrayLength(env, jbuf));
 
