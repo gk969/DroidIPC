@@ -18,7 +18,6 @@
 #include <jni.h>
 #include <malloc.h>
 #include <android/log.h>
-//#include <android/bitmap.h>
 
 #include "typeDef.h"
 
@@ -70,10 +69,14 @@ typedef struct
 }t_picSize;
 
 
+
 void NV21toRGB(u8 *nv21,u32 *rgb, t_picSize *picSize)
 {
 	u32 w,h;
 	u32 uvOfs=picSize->srcWid*picSize->srcHei;
+
+	picSize->top&=0xFFFFFFFE;
+	picSize->left&=0xFFFFFFFE;
 
 	for(h=0; h<picSize->tarHei; h++)
 	{
@@ -84,13 +87,12 @@ void NV21toRGB(u8 *nv21,u32 *rgb, t_picSize *picSize)
 		{
 			u32 Addr=hBase+w;
 			u32 srcYaddr=srcYbase+w;
-			u32 srcUVaddr=srcUVbase+w;
+			u32 srcUVaddr=srcUVbase+w&0xFFFFFFFE;
 			u8 y,u,v;
 			u8 r,g,b;
 			y=nv21[srcYaddr];
 			v=nv21[srcUVaddr];
 			u=nv21[srcUVaddr+1];
-
 
 			/*
 			r=y+1.4075*(v-128);
@@ -98,8 +100,14 @@ void NV21toRGB(u8 *nv21,u32 *rgb, t_picSize *picSize)
 			b=y+1.779*(u-128);
 			*/
 
+			r=y+1.13983*(v-128);
+			g=y-0.39465*(u-128)-0.58060*(v-128);
+			b=y+2.03211*(u-128);
 
-			r=g=b=(w+h);
+
+
+
+			//r=g=b=(w+h);
 
 			rgb[Addr]=0xFF000000|(r<<16)|(g<<8)|b;
 		}
