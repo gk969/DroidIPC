@@ -92,12 +92,14 @@ void NV21toRGB(u8 *nv21,u32 *rgb, t_picSize *picSize)
 			u=nv21[srcUVaddr+1];
 
 
+			/*
 			r=y+1.4075*(v-128);
 			g=y-0.3455*(u-128)-0.7196*(v-128);
 			b=y+1.779*(u-128);
+			*/
 
 
-			//r=g=b=(w+h)/2;
+			r=g=b=(w+h);
 
 			rgb[Addr]=0xFF000000|(r<<16)|(g<<8)|b;
 		}

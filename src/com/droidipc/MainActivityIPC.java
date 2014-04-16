@@ -7,6 +7,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.util.Log;
 import android.view.Menu;
 import android.content.Context;
@@ -81,13 +82,24 @@ public class MainActivityIPC extends Activity
     static {
         System.loadLibrary("ffmpeg-jni");
     }
-    
-	/*
-	 * private SurfaceHolder camSurfHolder = null; private SurfaceView camSurf =
-	 * null; static  private
-	 * 
-	    android:background="@android:color/transparent"
-	 */
+
+    private static final int DLG_CAM_ERROR = 1;
+    protected Dialog onCreateDialog(int id) {
+        if(id==DLG_CAM_ERROR)
+        {
+        	return new AlertDialog.Builder(this)
+            .setTitle("相机故障 ")
+            .setMessage("无法打开摄像头!点击\"确定\"退出程序...")
+            .setPositiveButton("确定", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int whichButton) {
+                	MainActivityIPC.this.finish();
+                }
+            })
+            .create();
+        }
+        
+        return null;
+    }
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState)
@@ -107,109 +119,103 @@ public class MainActivityIPC extends Activity
 		mCamView = new CamView(this, textLog);
 		if(mCamView.mCamera==null)
 		{
-			new AlertDialog.Builder(this)
-            .setTitle("无法打开后置摄像头!")
-            .setMessage("相机故障 ")
-            .setPositiveButton("确定", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int whichButton) {
-                	this.finish();
-                }
-            })
-            .create();
+			showDialog(DLG_CAM_ERROR);
 		}
-		
-		framePreview.addView(mCamView);
-
-		viewPalyback=(SurfaceView)findViewById(R.id.SurfaceViewPlayback);
-		playbackHld=viewPalyback.getHolder();
-		
-		viewPalyback.setZOrderOnTop(true);
-		playbackHld.setFormat(PixelFormat.TRANSPARENT);
-		
-		playViewCB=new PlaybackViewCB(viewPalyback);
-		playbackHld.addCallback(playViewCB);
-
-		textLog.setText(stringFromJNI());
-		//textLog.setText("Wid:"+mCamView.prevSize.width+" height:"+mCamView.prevSize.height);
-		
-		fpsCalc = new cFpsCalc();
-		
-		final Handler mHandler = new Handler()
+		else
 		{
-			public void handleMessage(Message msg)
-			{
-				if(msg.what==MSG_TIMER_FPS)
-				{
-					textLog.setText("FPS:"+fpsCalc.fps);
+			framePreview.addView(mCamView);
 
-				}
-				super.handleMessage(msg);
-			}
-		};
-		
-		TimerTask task = new TimerTask()
-		{
-			public void run()
-			{
-				Message message = new Message();
-				message.what = MSG_TIMER_FPS;      
-				mHandler.sendMessage(message);
-			}
-		};
-		
-		Timer timer = new Timer(true);
-		timer.schedule(task,FPS_INTVAL, FPS_INTVAL);
-		
-		mCamView.mCamera.setPreviewCallback(new Camera.PreviewCallback()
-		{
-			@Override
-			public void onPreviewFrame(byte[] data, Camera cam)
-			{
-				long curTimems=System.currentTimeMillis();
-				fpsCalc.frmCnt++;
-				if((curTimems-fpsCalc.timeMs)>FPS_INTVAL)
-				{
-					fpsCalc.fps=(int) (1000*fpsCalc.frmCnt/(curTimems-fpsCalc.timeMs));
-					fpsCalc.frmCnt=0;
-					fpsCalc.timeMs=curTimems;
-					//textLog.setText("FPS:"+fpsCalc.fps);
-
-				}
-				playViewCB.drawBit(data, mCamView);
-			}
+			viewPalyback=(SurfaceView)findViewById(R.id.SurfaceViewPlayback);
+			playbackHld=viewPalyback.getHolder();
 			
-		});
-		
-		//mCamView.mCamera.
+			viewPalyback.setZOrderOnTop(true);
+			playbackHld.setFormat(PixelFormat.TRANSPARENT);
+			
+			playViewCB=new PlaybackViewCB(viewPalyback);
+			playbackHld.addCallback(playViewCB);
 
-		mCamView.setOnClickListener(new View.OnClickListener()
-		{
-			public void onClick(View v)
+			textLog.setText(stringFromJNI());
+			//textLog.setText("Wid:"+mCamView.prevSize.width+" height:"+mCamView.prevSize.height);
+			
+			fpsCalc = new cFpsCalc();
+			
+			final Handler mHandler = new Handler()
 			{
-				mCamView.mCamera.autoFocus(null);
-			}
-		});
+				public void handleMessage(Message msg)
+				{
+					if(msg.what==MSG_TIMER_FPS)
+					{
+						textLog.setText("FPS:"+fpsCalc.fps);
 
-		buttonTakePic = (Button) findViewById(R.id.buttonTakePic);
-		buttonTakePic.setOnClickListener(new View.OnClickListener()
-		{
-			public void onClick(View v)
+					}
+					super.handleMessage(msg);
+				}
+			};
+			
+			TimerTask task = new TimerTask()
 			{
-				camAFCB = new AutoFocusCB();
-				mCamView.mCamera.autoFocus(camAFCB);
-			}
-		});
+				public void run()
+				{
+					Message message = new Message();
+					message.what = MSG_TIMER_FPS;      
+					mHandler.sendMessage(message);
+				}
+			};
+			
+			Timer timer = new Timer(true);
+			timer.schedule(task,FPS_INTVAL, FPS_INTVAL);
+			
+			mCamView.mCamera.setPreviewCallback(new Camera.PreviewCallback()
+			{
+				@Override
+				public void onPreviewFrame(byte[] data, Camera cam)
+				{
+					long curTimems=System.currentTimeMillis();
+					fpsCalc.frmCnt++;
+					if((curTimems-fpsCalc.timeMs)>FPS_INTVAL)
+					{
+						fpsCalc.fps=(int) (1000*fpsCalc.frmCnt/(curTimems-fpsCalc.timeMs));
+						fpsCalc.frmCnt=0;
+						fpsCalc.timeMs=curTimems;
+						//textLog.setText("FPS:"+fpsCalc.fps);
 
-		buttonRec = (Button) findViewById(R.id.buttonRec);
-		buttonRec.setOnClickListener(new View.OnClickListener()
-		{
-			public void onClick(View v)
+					}
+					playViewCB.drawBit(data, mCamView);
+				}
+				
+			});
+			
+			//mCamView.mCamera.
+
+			mCamView.setOnClickListener(new View.OnClickListener()
 			{
-				mCamView.recOnAction(buttonRec);
-			}
-		});
-		
-		Log.i("DroidIPC", "onCreate");
+				public void onClick(View v)
+				{
+					mCamView.mCamera.autoFocus(null);
+				}
+			});
+
+			buttonTakePic = (Button) findViewById(R.id.buttonTakePic);
+			buttonTakePic.setOnClickListener(new View.OnClickListener()
+			{
+				public void onClick(View v)
+				{
+					camAFCB = new AutoFocusCB();
+					mCamView.mCamera.autoFocus(camAFCB);
+				}
+			});
+
+			buttonRec = (Button) findViewById(R.id.buttonRec);
+			buttonRec.setOnClickListener(new View.OnClickListener()
+			{
+				public void onClick(View v)
+				{
+					mCamView.recOnAction(buttonRec);
+				}
+			});
+			
+			Log.i("DroidIPC", "onCreate");
+		}
 
 		// Create our Preview view and set it as the content of our activity.
 		
@@ -366,57 +372,54 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		
 		mCamera = Camera.open();
 		
-		if(mCamera==null)
+		if(mCamera!=null)
 		{
-			return;
-		}
-		
-		Camera.Parameters parameters = mCamera.getParameters();
-		List<Camera.Size> PictureSizes=parameters.getSupportedPictureSizes();
-		
-		picSize=PictureSizes.get(0);
-		for(int i=0; i<PictureSizes.size(); i++)
-		{
+			Camera.Parameters parameters = mCamera.getParameters();
+			List<Camera.Size> PictureSizes=parameters.getSupportedPictureSizes();
 			
-			if(picSize.width<PictureSizes.get(i).width)
+			picSize=PictureSizes.get(0);
+			for(int i=0; i<PictureSizes.size(); i++)
 			{
-				picSize.width=PictureSizes.get(i).width;
-				picSize.height=PictureSizes.get(i).height;
+				
+				if(picSize.width<PictureSizes.get(i).width)
+				{
+					picSize.width=PictureSizes.get(i).width;
+					picSize.height=PictureSizes.get(i).height;
+				}
+				
+				Log.i("PictureSizes", "width:"+PictureSizes.get(i).width+" height:"+PictureSizes.get(i).height); 
 			}
 			
-			Log.i("PictureSizes", "width:"+PictureSizes.get(i).width+" height:"+PictureSizes.get(i).height); 
-		}
-		
-		List<Camera.Size> PreviewSizes=parameters.getSupportedPreviewSizes();
-		prevSize=PreviewSizes.get(0);
-		for(int i=0; i<PreviewSizes.size(); i++)
-		{
-			textLog.setText(textLog.getText()+" "+PreviewSizes.get(i).width+"*"+PreviewSizes.get(i).height+" ");
-			textLog.getText();
-			if(prevSize.width<PreviewSizes.get(i).width)
+			List<Camera.Size> PreviewSizes=parameters.getSupportedPreviewSizes();
+			prevSize=PreviewSizes.get(0);
+			for(int i=0; i<PreviewSizes.size(); i++)
 			{
-				prevSize.width=PreviewSizes.get(i).width;
-				prevSize.height=PreviewSizes.get(i).height;
+				textLog.setText(textLog.getText()+" "+PreviewSizes.get(i).width+"*"+PreviewSizes.get(i).height+" ");
+				textLog.getText();
+				if(prevSize.width<PreviewSizes.get(i).width)
+				{
+					prevSize.width=PreviewSizes.get(i).width;
+					prevSize.height=PreviewSizes.get(i).height;
+				}
+				
+				Log.i("PreviewSizes", "width:"+PreviewSizes.get(i).width+" height:"+PreviewSizes.get(i).height); 
 			}
+			//Log.i("PreviewSizes", "width:"+prevSize.width+" height:"+prevSize.height); 
 			
-			Log.i("PreviewSizes", "width:"+PreviewSizes.get(i).width+" height:"+PreviewSizes.get(i).height); 
-		}
-		//Log.i("PreviewSizes", "width:"+prevSize.width+" height:"+prevSize.height); 
-		
-		
-		parameters.setPictureFormat(PixelFormat.JPEG);
-		parameters.setPictureSize(prevSize.width, prevSize.height);//(picSize.width, picSize.height);
-		parameters.setPreviewSize(prevSize.width, prevSize.height);
-		parameters.setJpegQuality(100);
-		//parameters.get
-		mCamera.setParameters(parameters);
-		
-		// Install a SurfaceHolder.Callback so we get notified when the
-		// underlying surface is created and destroyed.
-		mHolder = this.getHolder();
-		mHolder.addCallback(this);
-		mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
-		
+			
+			parameters.setPictureFormat(PixelFormat.JPEG);
+			parameters.setPictureSize(prevSize.width, prevSize.height);//(picSize.width, picSize.height);
+			parameters.setPreviewSize(prevSize.width, prevSize.height);
+			parameters.setJpegQuality(100);
+			//parameters.get
+			mCamera.setParameters(parameters);
+			
+			// Install a SurfaceHolder.Callback so we get notified when the
+			// underlying surface is created and destroyed.
+			mHolder = this.getHolder();
+			mHolder.addCallback(this);
+			mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+		}	
 	}
 	
 	
@@ -524,15 +527,18 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		// The Surface has been created, acquire the camera and tell it where
 		// to draw.
 		// mCamera = Camera.open();
-		try
+		if(mCamera != null)
 		{
-			mCamera.setPreviewDisplay(holder);
-			mCamera.startPreview();
-		} catch (IOException exception)
-		{
-			mCamera.release();
-			mCamera = null;
-			// TODO: add more exception handling logic here
+			try
+			{
+				mCamera.setPreviewDisplay(holder);
+				mCamera.startPreview();
+			} catch (IOException exception)
+			{
+				mCamera.release();
+				mCamera = null;
+				// TODO: add more exception handling logic here
+			}
 		}
 	}
 
