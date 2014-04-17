@@ -227,6 +227,8 @@ public class MainActivityIPC extends Activity
 		}
 		
 	}
+	
+
 
 	public class TakePicAfterFocus implements AutoFocusCallback
 	{
@@ -257,16 +259,17 @@ public class MainActivityIPC extends Activity
 				fos.write(data);
 				fos.close();
 				camera.stopPreview();
+
+				camera.setPreviewCallback(mCamView.previewCallBack);
 				camera.startPreview();
 				
 			} catch (Exception e)
 			{
-				Log.e(INPUT_METHOD_SERVICE, e.toString());
+				Log.e("PictureCallback", e.toString());
 			}
 		}
 	}
 	
-
 	
 }
 
@@ -383,21 +386,8 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		if(mCamera!=null)
 		{
 			Camera.Parameters parameters = mCamera.getParameters();
-			List<Camera.Size> PictureSizes=parameters.getSupportedPictureSizes();
 			
-			picSize=PictureSizes.get(0);
-			for(int i=0; i<PictureSizes.size(); i++)
-			{
-				
-				if(picSize.width<PictureSizes.get(i).width)
-				{
-					picSize.width=PictureSizes.get(i).width;
-					picSize.height=PictureSizes.get(i).height;
-				}
-				
-				Log.i("PictureSizes", "width:"+PictureSizes.get(i).width+" height:"+PictureSizes.get(i).height); 
-			}
-			
+			//查找最大预览尺寸
 			List<Camera.Size> PreviewSizes=parameters.getSupportedPreviewSizes();
 			prevSize=PreviewSizes.get(0);
 			for(int i=0; i<PreviewSizes.size(); i++)
@@ -414,9 +404,27 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			}
 			//Log.i("PreviewSizes", "width:"+prevSize.width+" height:"+prevSize.height); 
 			
+			//查找与最大预览尺寸最接近的照片尺寸
+			List<Camera.Size> PictureSizes=parameters.getSupportedPictureSizes();
+			picSize=PictureSizes.get(0);
+			int widDiff=Math.abs(picSize.width-prevSize.width);
+			for(int i=0; i<PictureSizes.size(); i++)
+			{
+				int curDiff=Math.abs(PictureSizes.get(i).width-prevSize.width);
+				if(widDiff>curDiff)
+				{
+					picSize.width=PictureSizes.get(i).width;
+					picSize.height=PictureSizes.get(i).height;
+					widDiff=curDiff;
+				}
+				
+				Log.i("PictureSizes", "width:"+PictureSizes.get(i).width+" height:"+PictureSizes.get(i).height); 
+			}
+			Log.i("PictureSizes Used", "width:"+picSize.width+" height:"+picSize.height); 
+			
 			
 			parameters.setPictureFormat(PixelFormat.JPEG);
-			parameters.setPictureSize(prevSize.width, prevSize.height);//(picSize.width, picSize.height);
+			parameters.setPictureSize(picSize.width, picSize.height);//(picSize.width, picSize.height);
 			parameters.setPreviewSize(prevSize.width, prevSize.height);
 			parameters.setJpegQuality(100);
 			//parameters.get
@@ -430,6 +438,8 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		}
 	}
 	
+
+
 	
 
 	private void releaseMediaRecorder()
@@ -440,6 +450,8 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			mMediaRec.release(); // release the recorder object
 			mMediaRec = null;
 			mCamera.lock(); // lock camera for later use
+
+			mCamera.setPreviewCallback(previewCallBack);
 			mCamera.startPreview();
 		}
 	}
