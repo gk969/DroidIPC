@@ -45,6 +45,8 @@ import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import com.droidipc.MainActivityIPC.CamPreviewCB;
+
 class cFpsCalc
 {
 	long timeMs;
@@ -65,7 +67,6 @@ public class MainActivityIPC extends Activity
 	private Button buttonTakePic;
 	private Button buttonRec;
 	private TextView textLog;
-	private AutoFocusCB camAFCB;
 	
 	private SurfaceView viewPalyback;
 	SurfaceHolder playbackHld;
@@ -116,7 +117,7 @@ public class MainActivityIPC extends Activity
 		textLog = (TextView) findViewById(R.id.textViewLog);
 		FrameLayout framePreview = (FrameLayout) findViewById(R.id.frameViewCam);
 		
-		mCamView = new CamView(this, textLog);
+		mCamView = new CamView(this, textLog, new CamPreviewCB());
 		if(mCamView.mCamera==null)
 		{
 			showDialog(DLG_CAM_ERROR);
@@ -165,26 +166,6 @@ public class MainActivityIPC extends Activity
 			Timer timer = new Timer(true);
 			timer.schedule(task,FPS_INTVAL, FPS_INTVAL);
 			
-			mCamView.mCamera.setPreviewCallback(new Camera.PreviewCallback()
-			{
-				@Override
-				public void onPreviewFrame(byte[] data, Camera cam)
-				{
-					long curTimems=System.currentTimeMillis();
-					fpsCalc.frmCnt++;
-					if((curTimems-fpsCalc.timeMs)>FPS_INTVAL)
-					{
-						fpsCalc.fps=(int) (1000*fpsCalc.frmCnt/(curTimems-fpsCalc.timeMs));
-						fpsCalc.frmCnt=0;
-						fpsCalc.timeMs=curTimems;
-						//textLog.setText("FPS:"+fpsCalc.fps);
-
-					}
-					playViewCB.drawBit(data, mCamView);
-				}
-				
-			});
-			
 			//mCamView.mCamera.
 
 			mCamView.setOnClickListener(new View.OnClickListener()
@@ -200,8 +181,10 @@ public class MainActivityIPC extends Activity
 			{
 				public void onClick(View v)
 				{
-					camAFCB = new AutoFocusCB();
-					mCamView.mCamera.autoFocus(camAFCB);
+					if(!mCamView.isRecording)
+					{
+						mCamView.mCamera.autoFocus(new TakePicAfterFocus());
+					}
 				}
 			});
 
@@ -221,8 +204,31 @@ public class MainActivityIPC extends Activity
 		
 		
 	}
+	
+	public class CamPreviewCB implements Camera.PreviewCallback
+	{
 
-	public class AutoFocusCB implements AutoFocusCallback
+		@Override
+		public void onPreviewFrame(byte[] data, Camera camera)
+		{
+			// TODO Auto-generated method stub
+
+			long curTimems=System.currentTimeMillis();
+			fpsCalc.frmCnt++;
+			if((curTimems-fpsCalc.timeMs)>FPS_INTVAL)
+			{
+				fpsCalc.fps=(int) (1000*fpsCalc.frmCnt/(curTimems-fpsCalc.timeMs));
+				fpsCalc.frmCnt=0;
+				fpsCalc.timeMs=curTimems;
+				//textLog.setText("FPS:"+fpsCalc.fps);
+
+			}
+			playViewCB.drawBit(data, mCamView);
+		}
+		
+	}
+
+	public class TakePicAfterFocus implements AutoFocusCallback
 	{
 		@Override
 		public void onAutoFocus(boolean success, Camera camera)
@@ -252,6 +258,7 @@ public class MainActivityIPC extends Activity
 				fos.close();
 				camera.stopPreview();
 				camera.startPreview();
+				
 			} catch (Exception e)
 			{
 				Log.e(INPUT_METHOD_SERVICE, e.toString());
@@ -357,6 +364,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	MediaRecorder mMediaRec;
 	
 	TextView textLog;
+	CamPreviewCB previewCallBack;
 	
 	Camera mCamera;
 	Camera.Size picSize;
@@ -364,14 +372,14 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 	private File mediaFile;
 
-	CamView(Context context, TextView txtLog)
+	CamView(Context context, TextView txtLog, CamPreviewCB camPreviewCB)
 	{
 		super(context);
 		
 		textLog=txtLog;
+		previewCallBack=camPreviewCB;
 		
 		mCamera = Camera.open();
-		
 		if(mCamera!=null)
 		{
 			Camera.Parameters parameters = mCamera.getParameters();
@@ -419,7 +427,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			mHolder = this.getHolder();
 			mHolder.addCallback(this);
 			mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
-		}	
+		}
 	}
 	
 	
@@ -488,7 +496,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 	}
 
-	private boolean isRecording = false;
+	public boolean isRecording = false;
 
 	public void recOnAction(Button btn)
 	{
@@ -501,7 +509,8 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			// inform the user that recording has stopped
 			btn.setText(R.string.record);
 			isRecording = false;
-		} else
+		}
+		else
 		{
 			// initialize video camera
 			if (prepareRec())
@@ -526,13 +535,11 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	{
 		// The Surface has been created, acquire the camera and tell it where
 		// to draw.
-		// mCamera = Camera.open();
 		if(mCamera != null)
 		{
 			try
 			{
 				mCamera.setPreviewDisplay(holder);
-				mCamera.startPreview();
 			} catch (IOException exception)
 			{
 				mCamera.release();
@@ -560,13 +567,16 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	{
 		// Now that the size is known, set up the camera parameters and begin
 		// the preview.
+		
 		if(mCamera!=null)
 		{
+			mCamera.setPreviewCallback(previewCallBack);
 			Camera.Parameters parameters = mCamera.getParameters();
 			parameters.setPreviewSize(w, h);
 			Log.i("DroidIPC", "surfaceChanged format:"+format+" size:"+w+","+h); 
 			mCamera.setParameters(parameters);
 			mCamera.startPreview();
 		}
+		
 	}
 }
