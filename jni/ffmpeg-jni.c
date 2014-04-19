@@ -89,7 +89,7 @@ void NV21toRGB(u8 *nv21,u32 *rgb, t_picSize *picSize)
 			u32 srcYaddr=srcYbase+w;
 			u32 srcUVaddr=srcUVbase+w&0xFFFFFFFE;
 			u8 y,u,v;
-			s32 r,g,b;
+			u8 r,g,b;
 			y=nv21[srcYaddr];
 			v=nv21[srcUVaddr];
 			u=nv21[srcUVaddr+1];
