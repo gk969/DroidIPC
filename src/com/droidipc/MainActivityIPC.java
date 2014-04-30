@@ -223,7 +223,7 @@ public class MainActivityIPC extends Activity
 				//textLog.setText("FPS:"+fpsCalc.fps);
 
 			}
-			playViewCB.drawBit(data, mCamView);
+			playViewCB.drawBit(data, mCamView.mCamera);
 		}
 		
 	}
@@ -299,19 +299,20 @@ class PlaybackViewCB implements SurfaceHolder.Callback
     	picSize=new int[6];
     }
 	
-	public void drawBit(byte[] nv21, SurfaceView srcView)
+	public void drawBit(byte[] nv21, Camera camera)
 	{
 		if(surfaceIsValid)
 		{
-			picSize[isrcWid]=srcView.getWidth();
-			picSize[isrcHei]=srcView.getHeight();
+			Camera.Size prevSize=camera.getParameters().getPreviewSize();
+			picSize[isrcWid]=prevSize.width;
+			picSize[isrcHei]=prevSize.height;
 	    	picSize[itop]=picSize[isrcHei]/2;
 	    	picSize[ileft]=0;
 			//Log.i("PlaybackViewCB", "frame data size:"+data.length); 
 	    	
 			if(OnPreviewFrame(nv21, rgb, picSize))
 			{
-				Log.i("PlaybackViewCB", "rgb length:"+rgb.length); 
+				//Log.i("PlaybackViewCB", "rgb length:"+rgb.length); 
 				mBitmap.setPixels(rgb, 0, picSize[itarWid], 0, 0, picSize[itarWid], picSize[itarHei]);
 				if(mBitmap!=null)
 				{
@@ -382,7 +383,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		textLog=txtLog;
 		previewCallBack=camPreviewCB;
 		
-		mCamera = Camera.open();
+		mCamera = Camera.open(0);
 		if(mCamera!=null)
 		{
 			Camera.Parameters parameters = mCamera.getParameters();
@@ -453,6 +454,8 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 			mCamera.setPreviewCallback(previewCallBack);
 			mCamera.startPreview();
+			mCamera.stopPreview();
+			mCamera.startPreview();
 		}
 	}
 
@@ -466,8 +469,8 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		mMediaRec.setVideoSource(MediaRecorder.VideoSource.CAMERA);
 		mMediaRec.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
 		mMediaRec.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-		mMediaRec.setVideoEncoder(MediaRecorder.VideoEncoder.MPEG_4_SP);
-		mMediaRec.setAudioEncoder(MediaRecorder.AudioEncoder.DEFAULT);
+		mMediaRec.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
+		mMediaRec.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
 		mMediaRec.setVideoSize(prevSize.width, prevSize.height);
 		mMediaRec.setVideoFrameRate(25);
 
