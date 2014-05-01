@@ -67,26 +67,30 @@ public class MainActivityIPC extends Activity
 	private Button buttonTakePic;
 	private Button buttonRec;
 	private TextView textLog;
-	
+	/*
 	private SurfaceView viewPalyback;
 	SurfaceHolder playbackHld;
 	PlaybackViewCB playViewCB;
-	
+	*/
 	final int MSG_TIMER_FPS=1;
 	final int FPS_INTVAL=500;
 	
 
 	cFpsCalc fpsCalc;
 
-    public native String  stringFromJNI();
+    //public native String  stringFromJNI();
     
+    /*
     static {
         System.loadLibrary("ffmpeg-jni");
     }
+    */
 
     private static final int DLG_CAM_ERROR = 1;
-    protected Dialog onCreateDialog(int id) {
-        if(id==DLG_CAM_ERROR)
+    private static final int DLG_NO_STORAGE = 2;
+    
+    protected Dialog onCreateDialog(int dlgID) {
+        if(dlgID==DLG_CAM_ERROR)
         {
         	return new AlertDialog.Builder(this)
             .setTitle("相机故障 ")
@@ -94,6 +98,18 @@ public class MainActivityIPC extends Activity
             .setPositiveButton("确定", new DialogInterface.OnClickListener() {
                 public void onClick(DialogInterface dialog, int whichButton) {
                 	MainActivityIPC.this.finish();
+                }
+            })
+            .create();
+        }
+        else if(dlgID==DLG_NO_STORAGE)
+        {
+        	return new AlertDialog.Builder(this)
+            .setTitle("存储器故障 ")
+            .setMessage("SD卡不存在或未挂载")
+            .setPositiveButton("确定", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int whichButton) {
+                	dialog.cancel();
                 }
             })
             .create();
@@ -126,6 +142,7 @@ public class MainActivityIPC extends Activity
 		{
 			framePreview.addView(mCamView);
 
+			/*
 			viewPalyback=(SurfaceView)findViewById(R.id.SurfaceViewPlayback);
 			playbackHld=viewPalyback.getHolder();
 			
@@ -134,8 +151,10 @@ public class MainActivityIPC extends Activity
 			
 			playViewCB=new PlaybackViewCB(viewPalyback);
 			playbackHld.addCallback(playViewCB);
+			*/
 
-			textLog.setText(stringFromJNI());
+			
+			//textLog.setText(stringFromJNI());
 			//textLog.setText("Wid:"+mCamView.prevSize.width+" height:"+mCamView.prevSize.height);
 			
 			fpsCalc = new cFpsCalc();
@@ -223,7 +242,7 @@ public class MainActivityIPC extends Activity
 				//textLog.setText("FPS:"+fpsCalc.fps);
 
 			}
-			playViewCB.drawBit(data, mCamView.mCamera);
+			//playViewCB.drawBit(data, mCamView.mCamera);
 		}
 		
 	}
@@ -252,12 +271,17 @@ public class MainActivityIPC extends Activity
 			try
 			{
 				String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss").format(new Date());
-				File file = new File(Environment.getExternalStorageDirectory()
-				+ File.separator + "PIC_" + timeStamp + ".jpg");
-				
-				FileOutputStream fos = new FileOutputStream(file);
-				fos.write(data);
-				fos.close();
+				File file = new File(getAppDir(), "PIC_" + timeStamp + ".jpg");
+				if(file.exists())
+				{
+					FileOutputStream fos = new FileOutputStream(file);
+					fos.write(data);
+					fos.close();
+				}
+				else
+				{
+					Log.w("onPictureTaken","File Fail");
+				}
 				camera.stopPreview();
 
 				camera.setPreviewCallback(mCamView.previewCallBack);
@@ -270,96 +294,31 @@ public class MainActivityIPC extends Activity
 		}
 	}
 	
-	
-}
-
-class PlaybackViewCB implements SurfaceHolder.Callback
-{
-	private SurfaceHolder hld;
-	private int color=0;
-	private boolean surfaceIsValid=false;
-	private Bitmap mBitmap;
-	private SurfaceView mView;
-	
-	
-	private int[] picSize;
-	private int[] rgb;
-	final int isrcWid=0;
-	final int isrcHei=1;
-	final int itop=2;
-	final int ileft=3;
-	final int itarWid=4;
-	final int itarHei=5;
-	
-	private static native boolean  OnPreviewFrame(byte[] nv21, int[] rgb, int[] picSize);
-    
-    public PlaybackViewCB(SurfaceView view)
-    {
-    	mView=view;
-    	picSize=new int[6];
-    }
-	
-	public void drawBit(byte[] nv21, Camera camera)
-	{
-		if(surfaceIsValid)
+	public File getAppDir()
 		{
-			Camera.Size prevSize=camera.getParameters().getPreviewSize();
-			picSize[isrcWid]=prevSize.width;
-			picSize[isrcHei]=prevSize.height;
-	    	picSize[itop]=picSize[isrcHei]/2;
-	    	picSize[ileft]=0;
-			//Log.i("PlaybackViewCB", "frame data size:"+data.length); 
-	    	
-			if(OnPreviewFrame(nv21, rgb, picSize))
+			File appDir=null;
+			
+			//外部存储器存在
+			if(Environment.getExternalStorageState()
+			.equals(android.os.Environment.MEDIA_MOUNTED))
 			{
-				//Log.i("PlaybackViewCB", "rgb length:"+rgb.length); 
-				mBitmap.setPixels(rgb, 0, picSize[itarWid], 0, 0, picSize[itarWid], picSize[itarHei]);
-				if(mBitmap!=null)
+				appDir=new File(Environment.getExternalStorageDirectory() +
+									File.separator + getString(R.string.app_name) + 
+									File.separator);
+				if(!appDir.exists())
 				{
-					Canvas playbackCvs;
-					playbackCvs=hld.lockCanvas();
-					//playbackCvs.drawColor(Color.rgb(color+=20, 0, 0));
-					playbackCvs.drawBitmap(mBitmap, 0, 0, null);
-					hld.unlockCanvasAndPost(playbackCvs);
+					appDir.mkdir();
 				}
 			}
-			
+			else
+			{
+				showDialog(DLG_NO_STORAGE);
+			}
+			return appDir;
 		}
-	}
-	
-	
-	
-	@Override
-	public void surfaceChanged(SurfaceHolder holder, int format, int width, int height)
-	{
-		// TODO Auto-generated method stub
-		
-	}
-
-	@Override
-	public void surfaceCreated(SurfaceHolder playbackHld)
-	{
-		// TODO Auto-generated method stub
-		hld=playbackHld;
-		surfaceIsValid=true;
-		
-		int width=mView.getWidth()&0xFFFFFFFE;
-		int height=mView.getHeight()&0xFFFFFFFE;
-		picSize[itarWid]=width;
-		picSize[itarHei]=height;
-		rgb=new int[width*height];
-    	mBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
-    	Log.i("palyback View Size", "width:"+width+" height:"+height); 
-	}
-
-	@Override
-	public void surfaceDestroyed(SurfaceHolder holder)
-	{
-		// TODO Auto-generated method stub
-		surfaceIsValid=false;
-	}
-	
 }
+
+	
 // ----------------------------------------------------------------------
 
 class CamView extends SurfaceView implements SurfaceHolder.Callback
@@ -373,12 +332,14 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	Camera mCamera;
 	Camera.Size picSize;
 	Camera.Size prevSize;
+	
+	Context ctx;
 
-	private File mediaFile;
 
 	CamView(Context context, TextView txtLog, CamPreviewCB camPreviewCB)
 	{
 		super(context);
+		ctx=context;
 		
 		textLog=txtLog;
 		previewCallBack=camPreviewCB;
@@ -454,13 +415,22 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 			mCamera.setPreviewCallback(previewCallBack);
 			mCamera.startPreview();
-			mCamera.stopPreview();
-			mCamera.startPreview();
 		}
 	}
 
 	public boolean prepareRec()
 	{
+		String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss")
+				.format(new Date());
+
+		File mediaFile;
+		mediaFile = new File(((MainActivityIPC)ctx).getAppDir(), "VID_" + timeStamp + ".mp4");
+		
+		if(!mediaFile.exists())
+		{
+			return false;
+		}
+		
 		mMediaRec = new MediaRecorder();
 		mCamera.stopPreview();
 		mCamera.unlock();
@@ -474,16 +444,6 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		mMediaRec.setVideoSize(prevSize.width, prevSize.height);
 		mMediaRec.setVideoFrameRate(25);
 
-		if (!(Environment.getExternalStorageState()
-				.equals(Environment.MEDIA_MOUNTED)))
-		{
-			return false;
-		}
-
-		String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss")
-				.format(new Date());
-		mediaFile = new File(Environment.getExternalStorageDirectory()
-				+ File.separator + "VID_" + timeStamp + ".mp4");
 		mMediaRec.setOutputFile(mediaFile.toString());
 
 		mMediaRec.setPreviewDisplay(getHolder().getSurface());
@@ -495,7 +455,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		catch(IllegalStateException e)
 		{
 			Log.d(VIEW_LOG_TAG,
-					"IllegalStateException preparing MediaRecorder: "
+				  "IllegalStateException preparing MediaRecorder: "
 							+ e.getMessage());
 			releaseMediaRecorder();
 			return false;
