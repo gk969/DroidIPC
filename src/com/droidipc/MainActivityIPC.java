@@ -1,6 +1,8 @@
 package com.droidipc;
 
 import android.media.MediaRecorder;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -39,8 +41,12 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -66,7 +72,8 @@ public class MainActivityIPC extends Activity
 	private CamView mCamView;
 	private Button buttonTakePic;
 	private Button buttonRec;
-	private TextView textLog;
+	private TextView tvFps;
+	private TextView tvIp;
 	/*
 	private SurfaceView viewPalyback;
 	SurfaceHolder playbackHld;
@@ -75,8 +82,10 @@ public class MainActivityIPC extends Activity
 	final int MSG_TIMER_FPS=1;
 	final int FPS_INTVAL=500;
 	
+	
+	private File webDir;
 
-	cFpsCalc fpsCalc;
+	private cFpsCalc fpsCalc;
 
     //public native String  stringFromJNI();
     
@@ -89,7 +98,8 @@ public class MainActivityIPC extends Activity
     private static final int DLG_CAM_ERROR = 1;
     private static final int DLG_NO_STORAGE = 2;
     
-    protected Dialog onCreateDialog(int dlgID) {
+    protected Dialog onCreateDialog(int dlgID) 
+    {
         if(dlgID==DLG_CAM_ERROR)
         {
         	return new AlertDialog.Builder(this)
@@ -130,10 +140,14 @@ public class MainActivityIPC extends Activity
 				WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 		setContentView(R.layout.activity_main_activity_ipc);
 		
-		textLog = (TextView) findViewById(R.id.textViewLog);
+		tvFps = (TextView)findViewById(R.id.tvFps);
+		tvIp=(TextView)findViewById(R.id.tvIp);
+		tvIp.setText(getLocalIp()+"   "+getWifiMac()); 
+		
+		
 		FrameLayout framePreview = (FrameLayout) findViewById(R.id.frameViewCam);
 		
-		mCamView = new CamView(this, textLog, new CamPreviewCB());
+		mCamView = new CamView(this, new CamPreviewCB());
 		if(mCamView.mCamera==null)
 		{
 			showDialog(DLG_CAM_ERROR);
@@ -154,8 +168,8 @@ public class MainActivityIPC extends Activity
 			*/
 
 			
-			//textLog.setText(stringFromJNI());
-			//textLog.setText("Wid:"+mCamView.prevSize.width+" height:"+mCamView.prevSize.height);
+			//tvFps.setText(stringFromJNI());
+			//tvFps.setText("Wid:"+mCamView.prevSize.width+" height:"+mCamView.prevSize.height);
 			
 			fpsCalc = new cFpsCalc();
 			
@@ -165,7 +179,7 @@ public class MainActivityIPC extends Activity
 				{
 					if(msg.what==MSG_TIMER_FPS)
 					{
-						textLog.setText("FPS:"+fpsCalc.fps);
+						tvFps.setText("FPS:"+fpsCalc.fps);
 
 					}
 					super.handleMessage(msg);
@@ -239,7 +253,7 @@ public class MainActivityIPC extends Activity
 				fpsCalc.fps=(int) (1000*fpsCalc.frmCnt/(curTimems-fpsCalc.timeMs));
 				fpsCalc.frmCnt=0;
 				fpsCalc.timeMs=curTimems;
-				//textLog.setText("FPS:"+fpsCalc.fps);
+				//tvFps.setText("FPS:"+fpsCalc.fps);
 
 			}
 			//playViewCB.drawBit(data, mCamView.mCamera);
@@ -247,8 +261,6 @@ public class MainActivityIPC extends Activity
 		
 	}
 	
-
-
 	public class TakePicAfterFocus implements AutoFocusCallback
 	{
 		@Override
@@ -271,10 +283,10 @@ public class MainActivityIPC extends Activity
 			try
 			{
 				String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss").format(new Date());
-				File file = new File(getAppDir(), "PIC_" + timeStamp + ".jpg");
-				if(file.exists())
+				File pic = new File(getAppDir(), "PIC_" + timeStamp + ".jpg");
+				if(pic.exists())
 				{
-					FileOutputStream fos = new FileOutputStream(file);
+					FileOutputStream fos = new FileOutputStream(pic);
 					fos.write(data);
 					fos.close();
 				}
@@ -295,27 +307,93 @@ public class MainActivityIPC extends Activity
 	}
 	
 	public File getAppDir()
+	{
+		File appDir=null;
+		
+		//外部存储器存在
+		if(Environment.getExternalStorageState()
+		.equals(android.os.Environment.MEDIA_MOUNTED))
 		{
-			File appDir=null;
-			
-			//外部存储器存在
-			if(Environment.getExternalStorageState()
-			.equals(android.os.Environment.MEDIA_MOUNTED))
+			appDir=new File(Environment.getExternalStorageDirectory() +
+								File.separator + getString(R.string.app_name));
+			if(!appDir.exists())
 			{
-				appDir=new File(Environment.getExternalStorageDirectory() +
-									File.separator + getString(R.string.app_name) + 
-									File.separator);
-				if(!appDir.exists())
-				{
-					appDir.mkdir();
-				}
+				appDir.mkdir();
 			}
-			else
-			{
-				showDialog(DLG_NO_STORAGE);
-			}
-			return appDir;
 		}
+		else
+		{
+			showDialog(DLG_NO_STORAGE);
+		}
+		return appDir;
+	}
+	
+	public File getWebDir()
+	{
+		File dir=null;
+		File appDir=getAppDir();
+
+		if(appDir!=null)
+		{
+			dir=new File(appDir.toString()+File.separator + "WebFile");
+			if(!dir.exists())
+			{
+				dir.mkdir();
+			}
+		}
+		return dir;
+	}
+	
+	public boolean HtmlToSD()
+	{
+		boolean fileSuccess=false;
+		webDir=getWebDir();
+		if(webDir!=null)
+		{
+			
+		}
+		
+		return fileSuccess;
+	}
+	
+	public String getLocalIp()
+	{
+	    try
+	    {
+	        for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces();
+	        		en.hasMoreElements();)
+	        {
+	            NetworkInterface intf = en.nextElement();
+	            for (Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses(); 
+	            		enumIpAddr.hasMoreElements();)
+	            {
+	                InetAddress inetAddress = enumIpAddr.nextElement();
+	                if (!inetAddress.isLoopbackAddress() && !inetAddress.isLinkLocalAddress())
+	                {
+	                    return inetAddress.getHostAddress().toString();
+	                }
+	            }
+	        }
+	    } catch (SocketException ex) {
+	        Log.e("getLocalIpAddress", ex.toString());
+	    }
+	    return null;
+	}
+	
+    public String getWifiMac() { 
+    	try
+    	{
+	        WifiManager wifi = (WifiManager) getSystemService(Context.WIFI_SERVICE);    
+	        WifiInfo info = wifi.getConnectionInfo();    
+	        return info.getMacAddress().toUpperCase();    
+    	}
+    	catch(Exception ex)
+    	{
+    		Log.e("getWifiMac", ex.toString());
+    	}
+    	return null;
+    }    
+	
 }
 
 	
@@ -326,7 +404,6 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	SurfaceHolder mHolder;
 	MediaRecorder mMediaRec;
 	
-	TextView textLog;
 	CamPreviewCB previewCallBack;
 	
 	Camera mCamera;
@@ -336,12 +413,11 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	Context ctx;
 
 
-	CamView(Context context, TextView txtLog, CamPreviewCB camPreviewCB)
+	CamView(Context context, CamPreviewCB camPreviewCB)
 	{
 		super(context);
 		ctx=context;
 		
-		textLog=txtLog;
 		previewCallBack=camPreviewCB;
 		
 		mCamera = Camera.open(0);
@@ -354,8 +430,6 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			prevSize=PreviewSizes.get(0);
 			for(int i=0; i<PreviewSizes.size(); i++)
 			{
-				textLog.setText(textLog.getText()+" "+PreviewSizes.get(i).width+"*"+PreviewSizes.get(i).height+" ");
-				textLog.getText();
 				if(prevSize.width<PreviewSizes.get(i).width)
 				{
 					prevSize.width=PreviewSizes.get(i).width;
@@ -399,9 +473,6 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
 		}
 	}
-	
-
-
 	
 
 	private void releaseMediaRecorder()
@@ -454,7 +525,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		}
 		catch(IllegalStateException e)
 		{
-			Log.d(VIEW_LOG_TAG,
+			Log.d("prepareRec",
 				  "IllegalStateException preparing MediaRecorder: "
 							+ e.getMessage());
 			releaseMediaRecorder();
@@ -462,7 +533,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		}
 		catch(IOException e)
 		{
-			Log.d(VIEW_LOG_TAG,
+			Log.d("prepareRec",
 					"IOException preparing MediaRecorder: " + e.getMessage());
 			releaseMediaRecorder();
 			return false;
