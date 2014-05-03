@@ -83,6 +83,7 @@ public class MainActivityIPC extends Activity
 	final int FPS_INTVAL=500;
 	
 	
+	private File appDir;
 	private File webDir;
 
 	private cFpsCalc fpsCalc;
@@ -143,7 +144,7 @@ public class MainActivityIPC extends Activity
 		tvFps = (TextView)findViewById(R.id.tvFps);
 		tvIp=(TextView)findViewById(R.id.tvIp);
 		tvIp.setText(getLocalIp()+"   "+getWifiMac()); 
-		
+		HtmlToSD();
 		
 		FrameLayout framePreview = (FrameLayout) findViewById(R.id.frameViewCam);
 		
@@ -214,7 +215,8 @@ public class MainActivityIPC extends Activity
 			{
 				public void onClick(View v)
 				{
-					if(!mCamView.isRecording)
+					getAppDir();
+					if(appDir!=null&&!mCamView.isRecording)
 					{
 						mCamView.mCamera.autoFocus(new TakePicAfterFocus());
 					}
@@ -226,7 +228,7 @@ public class MainActivityIPC extends Activity
 			{
 				public void onClick(View v)
 				{
-					mCamView.recOnAction(buttonRec);
+					mCamView.recOnAction(buttonRec, getAppDir());
 				}
 			});
 			
@@ -282,10 +284,11 @@ public class MainActivityIPC extends Activity
 		{
 			try
 			{
-				String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss").format(new Date());
-				File pic = new File(getAppDir(), "PIC_" + timeStamp + ".jpg");
-				if(pic.exists())
+				if(appDir!=null)
 				{
+					String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss").format(new Date());
+					File pic = new File(appDir, "PIC_" + timeStamp + ".jpg");
+					Log.i("onPictureTaken", pic.toString());
 					FileOutputStream fos = new FileOutputStream(pic);
 					fos.write(data);
 					fos.close();
@@ -308,46 +311,50 @@ public class MainActivityIPC extends Activity
 	
 	public File getAppDir()
 	{
-		File appDir=null;
+		File dir=null;
 		
 		//Íâ²¿´æ´¢Æ÷´æÔÚ
 		if(Environment.getExternalStorageState()
 		.equals(android.os.Environment.MEDIA_MOUNTED))
 		{
-			appDir=new File(Environment.getExternalStorageDirectory() +
+			dir=new File(Environment.getExternalStorageDirectory() +
 								File.separator + getString(R.string.app_name));
-			if(!appDir.exists())
+			if(!dir.exists())
 			{
-				appDir.mkdir();
+				dir.mkdir();
 			}
+			Log.i("getAppDir", "Dir:"+dir.toString());
 		}
 		else
 		{
 			showDialog(DLG_NO_STORAGE);
 		}
-		return appDir;
+		
+		appDir=dir;
+		return dir;
 	}
 	
 	public File getWebDir()
 	{
 		File dir=null;
-		File appDir=getAppDir();
-
+		
+		getAppDir();
 		if(appDir!=null)
 		{
-			dir=new File(appDir.toString()+File.separator + "WebFile");
+			dir=new File(appDir, "WebFile");
 			if(!dir.exists())
 			{
 				dir.mkdir();
 			}
 		}
+		webDir=dir;
 		return dir;
 	}
 	
 	public boolean HtmlToSD()
 	{
 		boolean fileSuccess=false;
-		webDir=getWebDir();
+		getWebDir();
 		if(webDir!=null)
 		{
 			
@@ -409,14 +416,11 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	Camera mCamera;
 	Camera.Size picSize;
 	Camera.Size prevSize;
-	
-	Context ctx;
 
 
 	CamView(Context context, CamPreviewCB camPreviewCB)
 	{
 		super(context);
-		ctx=context;
 		
 		previewCallBack=camPreviewCB;
 		
@@ -489,18 +493,19 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		}
 	}
 
-	public boolean prepareRec()
+	public boolean prepareRec(File vidDir)
 	{
+		if(vidDir==null)
+		{
+			return false;
+		}
+		
 		String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss")
 				.format(new Date());
 
 		File mediaFile;
-		mediaFile = new File(((MainActivityIPC)ctx).getAppDir(), "VID_" + timeStamp + ".mp4");
+		mediaFile = new File(vidDir, "VID_" + timeStamp + ".mp4");
 		
-		if(!mediaFile.exists())
-		{
-			return false;
-		}
 		
 		mMediaRec = new MediaRecorder();
 		mCamera.stopPreview();
@@ -544,7 +549,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 	public boolean isRecording = false;
 
-	public void recOnAction(Button btn)
+	public void recOnAction(Button btn, File vidDir)
 	{
 		if (isRecording)
 		{/**/
@@ -556,10 +561,11 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			btn.setText(R.string.record);
 			isRecording = false;
 		}
-		else
+		else if(vidDir!=null)
 		{
+			
 			// initialize video camera
-			if (prepareRec())
+			if (prepareRec(vidDir))
 			{
 				// Camera is available and unlocked, MediaRecorder is prepared,
 				// // now you can start recording
