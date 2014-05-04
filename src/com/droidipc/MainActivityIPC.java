@@ -14,6 +14,7 @@ import android.util.Log;
 import android.view.Menu;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.CompressFormat;
 import android.graphics.BitmapFactory;
@@ -41,6 +42,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
@@ -82,9 +84,6 @@ public class MainActivityIPC extends Activity
 	final int MSG_TIMER_FPS=1;
 	final int FPS_INTVAL=500;
 	
-	
-	private File appDir;
-	private File webDir;
 
 	private cFpsCalc fpsCalc;
 
@@ -133,6 +132,7 @@ public class MainActivityIPC extends Activity
 	protected void onCreate(Bundle savedInstanceState)
 	{
 		super.onCreate(savedInstanceState);
+		Log.i("DroidIPC", "onCreate");
 
 		requestWindowFeature(Window.FEATURE_NO_TITLE);
 		super.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
@@ -144,8 +144,31 @@ public class MainActivityIPC extends Activity
 		tvFps = (TextView)findViewById(R.id.tvFps);
 		tvIp=(TextView)findViewById(R.id.tvIp);
 		tvIp.setText(getLocalIp()+"   "+getWifiMac()); 
-		HtmlToSD();
 		
+		initCam();
+		
+		initServer();
+	}
+	
+	private void initServer()
+	{
+		File webDir=getWebDir();
+		File index=getWebFile("index.html");
+		if(index!=null)
+		{
+			try
+			{
+				HttpServer server=new HttpServer(8080, webDir);
+			} catch (IOException e)
+			{
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	private void initCam()
+	{
+
 		FrameLayout framePreview = (FrameLayout) findViewById(R.id.frameViewCam);
 		
 		mCamView = new CamView(this, new CamPreviewCB());
@@ -215,8 +238,7 @@ public class MainActivityIPC extends Activity
 			{
 				public void onClick(View v)
 				{
-					getAppDir();
-					if(appDir!=null&&!mCamView.isRecording)
+					if(getAppDir()!=null&&!mCamView.isRecording)
 					{
 						mCamView.mCamera.autoFocus(new TakePicAfterFocus());
 					}
@@ -232,12 +254,8 @@ public class MainActivityIPC extends Activity
 				}
 			});
 			
-			Log.i("DroidIPC", "onCreate");
 		}
 
-		// Create our Preview view and set it as the content of our activity.
-		
-		
 	}
 	
 	public class CamPreviewCB implements Camera.PreviewCallback
@@ -284,6 +302,7 @@ public class MainActivityIPC extends Activity
 		{
 			try
 			{
+				File appDir=getAppDir();
 				if(appDir!=null)
 				{
 					String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss").format(new Date());
@@ -330,7 +349,6 @@ public class MainActivityIPC extends Activity
 			showDialog(DLG_NO_STORAGE);
 		}
 		
-		appDir=dir;
 		return dir;
 	}
 	
@@ -338,7 +356,7 @@ public class MainActivityIPC extends Activity
 	{
 		File dir=null;
 		
-		getAppDir();
+		File appDir=getAppDir();
 		if(appDir!=null)
 		{
 			dir=new File(appDir, "WebFile");
@@ -347,20 +365,42 @@ public class MainActivityIPC extends Activity
 				dir.mkdir();
 			}
 		}
-		webDir=dir;
 		return dir;
 	}
 	
-	public boolean HtmlToSD()
+	public File getWebFile(String file)
 	{
-		boolean fileSuccess=false;
-		getWebDir();
+		File webFile=null; 
+		File webDir=getWebDir();
+		String logTag="HtmlToSD";
 		if(webDir!=null)
 		{
-			
+			webFile=new File(webDir, file);
+			//if(!webFile.exists())
+			{
+				try
+				{
+					InputStream rawIn = getResources().openRawResource(R.raw.index);
+					FileOutputStream fos = new FileOutputStream(webFile);
+					
+			        int     length;
+			        byte[] buffer = new byte[1024*32];
+			        while((length = rawIn.read(buffer)) != -1)
+			        {
+			            fos.write(buffer,0,length);
+			        }
+			        rawIn.close();
+			        fos.close();
+				}
+				catch(IOException ioe)
+				{
+					Log.e(logTag, ioe.toString());
+				}
+
+			}
 		}
-		
-		return fileSuccess;
+		Log.i(logTag, webFile.toString());
+		return webFile;
 	}
 	
 	public String getLocalIp()
