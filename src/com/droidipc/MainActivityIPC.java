@@ -72,6 +72,9 @@ class cFpsCalc
 public class MainActivityIPC extends Activity
 {
 	private CamView mCamView;
+	private boolean isRecording;
+	
+	
 	private Button buttonTakePic;
 	private Button buttonRec;
 	private TextView tvFps;
@@ -86,14 +89,6 @@ public class MainActivityIPC extends Activity
 	
 
 	private cFpsCalc fpsCalc;
-
-    //public native String  stringFromJNI();
-    
-    /*
-    static {
-        System.loadLibrary("ffmpeg-jni");
-    }
-    */
 
     private static final int DLG_CAM_ERROR = 1;
     private static final int DLG_NO_STORAGE = 2;
@@ -179,22 +174,6 @@ public class MainActivityIPC extends Activity
 		else
 		{
 			framePreview.addView(mCamView);
-
-			/*
-			viewPalyback=(SurfaceView)findViewById(R.id.SurfaceViewPlayback);
-			playbackHld=viewPalyback.getHolder();
-			
-			viewPalyback.setZOrderOnTop(true);
-			playbackHld.setFormat(PixelFormat.TRANSPARENT);
-			
-			playViewCB=new PlaybackViewCB(viewPalyback);
-			playbackHld.addCallback(playViewCB);
-			*/
-
-			
-			//tvFps.setText(stringFromJNI());
-			//tvFps.setText("Wid:"+mCamView.prevSize.width+" height:"+mCamView.prevSize.height);
-			
 			fpsCalc = new cFpsCalc();
 			
 			final Handler mHandler = new Handler()
@@ -223,8 +202,6 @@ public class MainActivityIPC extends Activity
 			Timer timer = new Timer(true);
 			timer.schedule(task,FPS_INTVAL, FPS_INTVAL);
 			
-			//mCamView.mCamera.
-
 			mCamView.setOnClickListener(new View.OnClickListener()
 			{
 				public void onClick(View v)
@@ -238,19 +215,41 @@ public class MainActivityIPC extends Activity
 			{
 				public void onClick(View v)
 				{
-					if(getAppDir()!=null&&!mCamView.isRecording)
+					if(getAppDir()!=null&&!isRecording)
 					{
 						mCamView.mCamera.autoFocus(new TakePicAfterFocus());
 					}
 				}
 			});
 
+			isRecording=false;
 			buttonRec = (Button) findViewById(R.id.buttonRec);
 			buttonRec.setOnClickListener(new View.OnClickListener()
 			{
 				public void onClick(View v)
 				{
-					mCamView.recOnAction(buttonRec, getAppDir());
+					if (isRecording)
+					{
+						mCamView.stopRec();
+						buttonRec.setText(R.string.record);
+						isRecording = false;
+					}
+					else
+					{
+						File appDir;
+						appDir=getAppDir();
+						if(appDir!=null)
+						{
+							String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss").format(new Date());
+							File vidFile = new File(appDir, "VID_" + timeStamp + ".MP4");
+							// initialize video camera
+							if (mCamView.startRec(vidFile))
+							{
+								buttonRec.setText(R.string.stop);
+								isRecording = true;
+							}
+						}
+					}
 				}
 			});
 			
@@ -518,7 +517,6 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		}
 	}
 	
-
 	private void releaseMediaRecorder()
 	{
 		if (mMediaRec != null)
@@ -579,8 +577,6 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		return true;
 
 	}
-
-	public boolean isRecording = false;
 	
 	public boolean startRec(File vidFile)
 	{
@@ -602,40 +598,6 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		// stop recording and release camera
 		mMediaRec.stop(); // stop the recording
 		releaseMediaRecorder(); // release the MediaRecorder object
-	}
-
-	public void recOnAction(Button btn, File vidFile)
-	{
-		if (isRecording)
-		{/**/
-			// stop recording and release camera
-			mMediaRec.stop(); // stop the recording
-			releaseMediaRecorder(); // release the MediaRecorder object
-
-			// inform the user that recording has stopped
-			btn.setText(R.string.record);
-			isRecording = false;
-		}
-		else if(vidFile!=null)
-		{
-			
-			// initialize video camera
-			if (prepareRec(vidFile))
-			{
-				// Camera is available and unlocked, MediaRecorder is prepared,
-				// // now you can start recording
-				mMediaRec.start();
-
-				// inform the user that recording has started
-				btn.setText(R.string.stop);
-				isRecording = true;
-			} else
-			{
-				// prepare didn't work, release the camera
-				releaseMediaRecorder();
-				// inform user
-			}
-		}
 	}
 
 	public void surfaceCreated(SurfaceHolder holder)

@@ -1,3 +1,3 @@
 git add -A
-git commit -m"Eclipse Auto"
+git commit -m"Deliete Jni"
 pause
