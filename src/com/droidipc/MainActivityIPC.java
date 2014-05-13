@@ -85,6 +85,7 @@ public class MainActivityIPC extends Activity
 	PlaybackViewCB playViewCB;
 	*/
 	final int MSG_TIMER_FPS=1;
+	final int MSG_TIMER_REC=2;
 	final int FPS_INTVAL=500;
 	
 
@@ -180,16 +181,27 @@ public class MainActivityIPC extends Activity
 			{
 				public void handleMessage(Message msg)
 				{
-					if(msg.what==MSG_TIMER_FPS)
+					switch(msg.what)
 					{
-						tvFps.setText("FPS:"+fpsCalc.fps);
-
+						case MSG_TIMER_FPS:
+						{
+							tvFps.setText("FPS:"+fpsCalc.fps);
+							break;
+						}
+						case MSG_TIMER_REC:
+						{
+							
+							break;
+						}
+						default:
+							break;
 					}
 					super.handleMessage(msg);
 				}
 			};
 			
-			TimerTask task = new TimerTask()
+			Timer timer = new Timer(true);
+			timer.schedule(new TimerTask()
 			{
 				public void run()
 				{
@@ -197,10 +209,7 @@ public class MainActivityIPC extends Activity
 					message.what = MSG_TIMER_FPS;      
 					mHandler.sendMessage(message);
 				}
-			};
-			
-			Timer timer = new Timer(true);
-			timer.schedule(task,FPS_INTVAL, FPS_INTVAL);
+			},FPS_INTVAL, FPS_INTVAL);
 			
 			mCamView.setOnClickListener(new View.OnClickListener()
 			{

@@ -1,3 +1,3 @@
 git add -A
-git commit -m"Deliete Jni"
+git commit -m"Auto"
 pause
