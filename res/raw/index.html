@@ -2,14 +2,46 @@
 PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" 
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html>
-    <head>
-        <meta charset="utf-8">
-		<title>DroidIPC!</title>
-	</head>
-	
-	<body>
-		<div style="margin:auto;margin-top:100px;width:800px;height:600px;background:#F0F0F0;">
-		
-		</div>
-	</body>
+<head>
+	<meta charset="utf-8">
+	<title>DroidIPC!</title>
+</head>
+
+<body style="margin:auto; width:800px; text-align:center;">
+	<div style="font:60px/120px 'microsoft yahei';margin-top:30px;">DroidIPC</div>
+	<div id="vidBox" style="margin-top:50px;background:#F0F0F0;text-align:center;box-shadow: 0 0 20px #888;border-radius:20px;">
+		<video id="camVid" src="http://192.168.0.102:8080/she.mp4" width="640"></video>
+	</div>
+
+</body>
+
+<script type="text/javascript">
+function $(id){
+    return document.getElementById(id);
+}
+
+$("camVid").onclick=function playPause()
+{
+	if(this.paused)
+	{
+	    this.play();
+	}
+	else
+	{
+	    this.pause();
+	}
+}
+
+$("camVid").oncontextmenu=function disMenu(){return false;}
+
+$("camVid").onloadedmetadata=function vidLoaded()
+{
+	console.log("vid wid:%d hei:%d", this.clientWidth, this.clientHeight);
+	var vidMargin=($("vidBox").clientWidth-this.clientWidth)/2;
+	$("vidBox").style.height=2+this.clientHeight+"px";
+	this.style.marginTop="1px";
+	console.log("vidMargin:%d",vidMargin);
+	console.log("box wid:%d hei:%d", $("vidBox").clientWidth, $("vidBox").clientHeight);
+}
+</script>
 </html>

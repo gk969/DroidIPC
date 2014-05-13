@@ -533,19 +533,12 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		}
 	}
 
-	public boolean prepareRec(File vidDir)
+	public boolean prepareRec(File vidFile)
 	{
-		if(vidDir==null)
+		if(vidFile==null)
 		{
 			return false;
 		}
-		
-		String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss")
-				.format(new Date());
-
-		File mediaFile;
-		mediaFile = new File(vidDir, "VID_" + timeStamp + ".mp4");
-		
 		
 		mMediaRec = new MediaRecorder();
 		mCamera.stopPreview();
@@ -560,7 +553,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		mMediaRec.setVideoSize(prevSize.width, prevSize.height);
 		mMediaRec.setVideoFrameRate(25);
 
-		mMediaRec.setOutputFile(mediaFile.toString());
+		mMediaRec.setOutputFile(vidFile.toString());
 
 		mMediaRec.setPreviewDisplay(getHolder().getSurface());
 
@@ -588,8 +581,30 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	}
 
 	public boolean isRecording = false;
+	
+	public boolean startRec(File vidFile)
+	{
+		// initialize video camera
+		if (prepareRec(vidFile))
+		{
+			mMediaRec.start();
+			return true;
+		}else
+		{
+			// prepare didn't work, release the camera
+			releaseMediaRecorder();
+			return false;
+		}
+	}
+	
+	public void stopRec()
+	{
+		// stop recording and release camera
+		mMediaRec.stop(); // stop the recording
+		releaseMediaRecorder(); // release the MediaRecorder object
+	}
 
-	public void recOnAction(Button btn, File vidDir)
+	public void recOnAction(Button btn, File vidFile)
 	{
 		if (isRecording)
 		{/**/
@@ -601,11 +616,11 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			btn.setText(R.string.record);
 			isRecording = false;
 		}
-		else if(vidDir!=null)
+		else if(vidFile!=null)
 		{
 			
 			// initialize video camera
-			if (prepareRec(vidDir))
+			if (prepareRec(vidFile))
 			{
 				// Camera is available and unlocked, MediaRecorder is prepared,
 				// // now you can start recording
