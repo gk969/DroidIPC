@@ -79,14 +79,15 @@ public class MainActivityIPC extends Activity
 	private Button buttonRec;
 	private TextView tvFps;
 	private TextView tvIp;
-	/*
-	private SurfaceView viewPalyback;
-	SurfaceHolder playbackHld;
-	PlaybackViewCB playViewCB;
-	*/
+	
+	private int vidSerial;
+	Timer timCam;
+	
 	final int MSG_TIMER_FPS=1;
-	final int MSG_TIMER_REC=2;
 	final int FPS_INTVAL=500;
+	
+	final int MSG_TIMER_REC=2;
+	final int REC_INTERVAL=10000;
 	
 
 	private cFpsCalc fpsCalc;
@@ -146,6 +147,13 @@ public class MainActivityIPC extends Activity
 		initServer();
 	}
 	
+	protected void onDestroy()
+	{
+		super.onDestroy();
+		Log.i("onDestroy", "onDestroy");
+		timCam.cancel();
+	}
+	
 	private void initServer()
 	{
 		File webDir=getWebDir();
@@ -162,9 +170,64 @@ public class MainActivityIPC extends Activity
 		}
 	}
 	
+	private class hldMsg extends Handler
+	{
+		@Override
+		public void handleMessage(Message msg)
+		{
+			switch(msg.what)
+			{
+				case MSG_TIMER_FPS:
+				{
+					tvFps.setText("FPS:"+fpsCalc.fps);
+					break;
+				}
+				case MSG_TIMER_REC:
+				{
+					Log.i("handleMessage", "timer REC "+Thread.currentThread().getName());
+					
+					File appDir;
+					appDir=getAppDir();
+					if(appDir!=null)
+					{
+						if (isRecording)
+						{
+							mCamView.stopRec();
+							vidSerial++;
+							File vidFile = new File(appDir, "VID_" + vidSerial + ".MP4");
+							
+							mCamView.startRec(vidFile);
+						}
+						else
+						{
+							vidSerial=0;
+							File vidFile = new File(appDir, "VID_" + vidSerial + ".MP4");
+							if(mCamView.startRec(vidFile))
+							{
+								isRecording=true;
+							}
+						}
+					}
+					
+					break;
+				}
+				default:
+					break;
+			}
+			super.handleMessage(msg);
+		}
+		
+		public void sendMsg(final int msg)
+		{
+			Message CMsg = new Message();
+			CMsg.what = msg;      
+			this.sendMessage(CMsg);
+		}
+	}
+	
+	
 	private void initCam()
 	{
-
 		FrameLayout framePreview = (FrameLayout) findViewById(R.id.frameViewCam);
 		
 		mCamView = new CamView(this, new CamPreviewCB());
@@ -177,39 +240,28 @@ public class MainActivityIPC extends Activity
 			framePreview.addView(mCamView);
 			fpsCalc = new cFpsCalc();
 			
-			final Handler mHandler = new Handler()
-			{
-				public void handleMessage(Message msg)
-				{
-					switch(msg.what)
-					{
-						case MSG_TIMER_FPS:
-						{
-							tvFps.setText("FPS:"+fpsCalc.fps);
-							break;
-						}
-						case MSG_TIMER_REC:
-						{
-							
-							break;
-						}
-						default:
-							break;
-					}
-					super.handleMessage(msg);
-				}
-			};
+			final hldMsg mMsgHld = new hldMsg();
 			
-			Timer timer = new Timer(true);
-			timer.schedule(new TimerTask()
+			timCam = new Timer(true);
+			timCam.schedule(new TimerTask()
 			{
+				@Override
 				public void run()
 				{
-					Message message = new Message();
-					message.what = MSG_TIMER_FPS;      
-					mHandler.sendMessage(message);
+					mMsgHld.sendMsg(MSG_TIMER_FPS);
 				}
 			},FPS_INTVAL, FPS_INTVAL);
+			
+			
+			timCam.schedule(new TimerTask()
+			{
+				@Override
+				public void run()
+				{
+					mMsgHld.sendMsg(MSG_TIMER_REC);
+				}
+			}, 100, REC_INTERVAL);
+			
 			
 			mCamView.setOnClickListener(new View.OnClickListener()
 			{
@@ -562,7 +614,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 		mMediaRec.setOutputFile(vidFile.toString());
 
-		mMediaRec.setPreviewDisplay(getHolder().getSurface());
+		mMediaRec.setPreviewDisplay(mHolder.getSurface());
 
 		try
 		{
@@ -604,9 +656,12 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	
 	public void stopRec()
 	{
-		// stop recording and release camera
-		mMediaRec.stop(); // stop the recording
-		releaseMediaRecorder(); // release the MediaRecorder object
+		if(mMediaRec!=null)
+		{
+			// stop recording and release camera
+			mMediaRec.stop(); // stop the recording
+			releaseMediaRecorder(); // release the MediaRecorder object
+		}
 	}
 
 	public void surfaceCreated(SurfaceHolder holder)
@@ -629,6 +684,8 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 	public void surfaceDestroyed(SurfaceHolder holder)
 	{
+		stopRec();
+		
 		// Surface will be destroyed when we return, so stop the preview.
 		// Because the CameraDevice object is not a shared resource, it's very
 		// important to release it when the activity is paused.

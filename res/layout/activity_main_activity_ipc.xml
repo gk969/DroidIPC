@@ -31,6 +31,7 @@
         android:layout_toRightOf="@+id/tvFps"
         android:textAppearance="?android:attr/textAppearanceMedium"
         android:textColor="#F00" />
+    
     <Button
         android:id="@+id/buttonTakePic"
         android:layout_width="75dp"
@@ -44,8 +45,8 @@
         android:id="@+id/buttonRec"
         android:layout_width="75dp"
         android:layout_height="50dp"
-        android:layout_alignParentTop="true"
-        android:layout_alignParentRight="true"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentLeft="true"
         android:text="@string/record" />
 
     
@@ -55,5 +56,4 @@
         android:layout_height="75dp"
         android:layout_alignParentRight="true"
         android:layout_centerVertical="true"/>
-
 </RelativeLayout>

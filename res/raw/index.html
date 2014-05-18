@@ -20,14 +20,11 @@ function $(id){
     return document.getElementById(id);
 }
 
-$("camVid").onclick=function playPause()
-{
-	if(this.paused)
-	{
+$("camVid").onclick=function playPause(){
+	if(this.paused){
 	    this.play();
 	}
-	else
-	{
+	else{
 	    this.pause();
 	}
 }
