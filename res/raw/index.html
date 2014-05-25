@@ -5,40 +5,61 @@ PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
 <head>
 	<meta charset="utf-8">
 	<title>DroidIPC!</title>
+	<script src="./jquery211min.js"></script>
 </head>
 
 <body style="margin:auto; width:800px; text-align:center;">
 	<div style="font:60px/120px 'microsoft yahei';margin-top:30px;">DroidIPC</div>
 	<div id="vidBox" style="margin-top:50px;background:#F0F0F0;text-align:center;box-shadow: 0 0 20px #888;border-radius:20px;">
-		<video id="camVid" src="http://192.168.0.102:8080/she.mp4" width="640"></video>
+		<video id="camVid" width="640"></video>
 	</div>
 
 </body>
 
 <script type="text/javascript">
-function $(id){
-    return document.getElementById(id);
+function e(id)
+{
+	return document.getElementById(id);
 }
 
-$("camVid").onclick=function playPause(){
+var vidFileNm="";
+
+e("camVid").onclick=function(){
 	if(this.paused){
-	    this.play();
+		this.play();
 	}
 	else{
-	    this.pause();
+		this.pause();
 	}
+};
+
+function getVidFile(){
+	$.get("newVid",function(data,status){
+		//console.log("Data: " + data + "\nStatus: " + status);
+		
+		if(vidFileNm!=data&&data.slice(0,3)=="VID"){
+			vidFileNm=data;
+			console.log("video file loaded:%s", data);
+			e("camVid").src="./"+vidFileNm;
+		}
+	});
 }
 
-$("camVid").oncontextmenu=function disMenu(){return false;}
+window.setInterval("getVidFile()", 1000);
 
-$("camVid").onloadedmetadata=function vidLoaded()
+//e("camVid").src="http://192.168.0.102:8080/she.mp4";
+
+e("camVid").oncontextmenu=function disMenu(){return false;}
+
+e("camVid").onloadedmetadata=function vidLoaded()
 {
 	console.log("vid wid:%d hei:%d", this.clientWidth, this.clientHeight);
-	var vidMargin=($("vidBox").clientWidth-this.clientWidth)/2;
-	$("vidBox").style.height=2+this.clientHeight+"px";
+	var vidMargin=(e("vidBox").clientWidth-this.clientWidth)/2;
+	e("vidBox").style.height=2+this.clientHeight+"px";
 	this.style.marginTop="1px";
 	console.log("vidMargin:%d",vidMargin);
-	console.log("box wid:%d hei:%d", $("vidBox").clientWidth, $("vidBox").clientHeight);
+	console.log("box wid:%d hei:%d", e("vidBox").clientWidth, e("vidBox").clientHeight);
+	e("camVid").play();
 }
 </script>
 </html>

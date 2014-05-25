@@ -83,6 +83,8 @@ public class MainActivityIPC extends Activity
 	private int vidSerial;
 	Timer timCam;
 	
+	final int VID_FILE_FIFO_SIZE=5;
+	
 	final int MSG_TIMER_FPS=1;
 	final int FPS_INTVAL=500;
 	
@@ -90,6 +92,8 @@ public class MainActivityIPC extends Activity
 	final int REC_INTERVAL=10000;
 	
 
+	HttpServer httpSvr;
+	
 	private cFpsCalc fpsCalc;
 
     private static final int DLG_CAM_ERROR = 1;
@@ -157,17 +161,21 @@ public class MainActivityIPC extends Activity
 	private void initServer()
 	{
 		File webDir=getWebDir();
-		File index=getWebFile("index.html");
-		if(index!=null)
+		if(webFileToSD())
 		{
 			try
 			{
-				HttpServer server=new HttpServer(8080, webDir);
+				httpSvr=new HttpServer(8080, webDir);
 			} catch (IOException e)
 			{
 				e.printStackTrace();
 			}
 		}
+	}
+	
+	public String VidFileName(int serial)
+	{
+		return "VID_"+serial+".MP4";
 	}
 	
 	private class hldMsg extends Handler
@@ -186,22 +194,33 @@ public class MainActivityIPC extends Activity
 				{
 					Log.i("handleMessage", "timer REC "+Thread.currentThread().getName());
 					
-					File appDir;
-					appDir=getAppDir();
-					if(appDir!=null)
+					File webDir;
+					webDir=getWebDir();
+					if(webDir!=null)
 					{
 						if (isRecording)
 						{
 							mCamView.stopRec();
+							httpSvr.newVidNm=VidFileName(vidSerial);
 							vidSerial++;
-							File vidFile = new File(appDir, "VID_" + vidSerial + ".MP4");
-							
+							File vidFile = new File(webDir, VidFileName(vidSerial));
+							if(vidSerial>=VID_FILE_FIFO_SIZE)
+							{
+								File oldFile = new File(webDir, "VID_" + (vidSerial-VID_FILE_FIFO_SIZE) + ".MP4");
+								if(oldFile.exists())
+								{
+									if(!oldFile.delete())
+									{
+										Log.i("camRec", "oldFile.delete() Fail!");
+									}
+								}
+							}
 							mCamView.startRec(vidFile);
 						}
 						else
 						{
 							vidSerial=0;
-							File vidFile = new File(appDir, "VID_" + vidSerial + ".MP4");
+							File vidFile = new File(webDir, VidFileName(vidSerial));
 							if(mCamView.startRec(vidFile))
 							{
 								isRecording=true;
@@ -428,39 +447,49 @@ public class MainActivityIPC extends Activity
 		return dir;
 	}
 	
-	public File getWebFile(String file)
+	public boolean webFileToSD()
 	{
 		File webFile=null; 
 		File webDir=getWebDir();
-		String logTag="HtmlToSD";
-		if(webDir!=null)
+		
+		if(webDir==null)
 		{
-			webFile=new File(webDir, file);
-			//if(!webFile.exists())
+			return false;
+		}
+		
+		int[] webFileRawId={R.raw.index, R.raw.jquery211min};
+		String[] webFileName={"index.html", "jquery211min.js"};
+		final int webFileNum=webFileRawId.length;
+		if(webFileNum!=webFileName.length)
+		{
+			return false;
+		}
+		
+		for(int i=0; i<webFileNum; i++)
+		{
+			webFile=new File(webDir, webFileName[i]);
+			Log.i("webFileToSD", webFile.toString());
+			try
 			{
-				try
-				{
-					InputStream rawIn = getResources().openRawResource(R.raw.index);
-					FileOutputStream fos = new FileOutputStream(webFile);
-					
-			        int     length;
-			        byte[] buffer = new byte[1024*32];
-			        while((length = rawIn.read(buffer)) != -1)
-			        {
-			            fos.write(buffer,0,length);
-			        }
-			        rawIn.close();
-			        fos.close();
-				}
-				catch(IOException ioe)
-				{
-					Log.e(logTag, ioe.toString());
-				}
-
+				InputStream rawIn = getResources().openRawResource(webFileRawId[i]);
+				FileOutputStream fos = new FileOutputStream(webFile);
+				
+		        int     length;
+		        byte[] buffer = new byte[1024*32];
+		        while((length = rawIn.read(buffer)) != -1)
+		        {
+		            fos.write(buffer,0,length);
+		        }
+		        rawIn.close();
+		        fos.close();
+			}
+			catch(IOException ioe)
+			{
+				Log.e("webFileToSD", ioe.toString());
+				return false;
 			}
 		}
-		Log.i(logTag, webFile.toString());
-		return webFile;
+		return true;
 	}
 	
 	public String getLocalIp()
@@ -642,6 +671,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	public boolean startRec(File vidFile)
 	{
 		// initialize video camera
+		Log.i("startRec","startRec");
 		if (prepareRec(vidFile))
 		{
 			mMediaRec.start();
