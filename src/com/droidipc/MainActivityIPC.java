@@ -91,6 +91,7 @@ public class MainActivityIPC extends Activity
 	final int MSG_TIMER_REC=2;
 	final int REC_INTERVAL=10000;
 	
+	hldMsg mMsgHld;
 
 	HttpServer httpSvr;
 	
@@ -98,32 +99,39 @@ public class MainActivityIPC extends Activity
 
     private static final int DLG_CAM_ERROR = 1;
     private static final int DLG_NO_STORAGE = 2;
+    private static final int DLG_WIFI_LOST = 3;
+    
+    public Dialog sysFaultAlert(String title, String desc, final boolean exit)
+    {
+    	return new AlertDialog.Builder(this)
+        .setTitle("哎呀 "+title+"粗问题了")
+        .setMessage(desc+"!"+(exit?",点击\"确定\"退出程序...":""))
+        .setPositiveButton("确定", new DialogInterface.OnClickListener(){
+            public void onClick(DialogInterface dialog, int whichButton){
+            	if(exit){
+            		MainActivityIPC.this.finish();
+            	}
+            }
+        })
+        .create();
+    }
     
     protected Dialog onCreateDialog(int dlgID) 
     {
-        if(dlgID==DLG_CAM_ERROR)
+        switch(dlgID)
         {
-        	return new AlertDialog.Builder(this)
-            .setTitle("相机故障 ")
-            .setMessage("无法打开摄像头!点击\"确定\"退出程序...")
-            .setPositiveButton("确定", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int whichButton) {
-                	MainActivityIPC.this.finish();
-                }
-            })
-            .create();
-        }
-        else if(dlgID==DLG_NO_STORAGE)
-        {
-        	return new AlertDialog.Builder(this)
-            .setTitle("存储器故障 ")
-            .setMessage("SD卡不存在或未挂载")
-            .setPositiveButton("确定", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int whichButton) {
-                	dialog.cancel();
-                }
-            })
-            .create();
+        	case DLG_CAM_ERROR:
+        	{
+        		return sysFaultAlert("相机", "无法打开摄像头", true);
+        	}
+        	case DLG_NO_STORAGE:
+        	{
+        		return sysFaultAlert("存储器", "SD卡不存在或未挂载", true);
+        	}
+        	case DLG_WIFI_LOST:
+        	{
+        		return sysFaultAlert("WIFI", "WIFI未连接", true);
+        	}
         }
         
         return null;
@@ -144,18 +152,28 @@ public class MainActivityIPC extends Activity
 		
 		tvFps = (TextView)findViewById(R.id.tvFps);
 		tvIp=(TextView)findViewById(R.id.tvIp);
-		tvIp.setText(getLocalIp()+"   "+getWifiMac()); 
 		
-		initCam();
-		
-		initServer();
+		NetIf wifi=getWifi();
+		if(wifi==null)
+		{
+			showDialog(DLG_WIFI_LOST);
+		}
+		else
+		{
+			tvIp.setText(wifi.aip+"   "+wifi.amac); 
+			
+			initCam();
+			
+			initServer();
+		}
 	}
 	
 	protected void onDestroy()
 	{
 		super.onDestroy();
 		Log.i("onDestroy", "onDestroy");
-		timCam.cancel();
+		if(timCam!=null)
+			timCam.cancel();
 	}
 	
 	private void initServer()
@@ -259,7 +277,7 @@ public class MainActivityIPC extends Activity
 			framePreview.addView(mCamView);
 			fpsCalc = new cFpsCalc();
 			
-			final hldMsg mMsgHld = new hldMsg();
+			mMsgHld = new hldMsg();
 			
 			timCam = new Timer(true);
 			timCam.schedule(new TimerTask()
@@ -516,12 +534,54 @@ public class MainActivityIPC extends Activity
 	    return null;
 	}
 	
-    public String getWifiMac() { 
+	public class NetIf
+	{
+		String aip;
+		int nip;
+		String amac;
+
+	    public String ip_ntoa(int ipInt) 
+	    {
+	    	if(ipInt!=0)
+	    	{
+	    		return new StringBuilder().append(((ipInt >> 24) & 0xff)).append('.')
+	                .append((ipInt >> 16) & 0xff).append('.').append(
+	                        (ipInt >> 8) & 0xff).append('.').append((ipInt & 0xff))
+	                .toString();
+	    	}
+	    	return null;
+	    }
+	    
+	    public boolean setIp(int ip)
+	    {
+	    	if(ip==0)
+	    	{
+	    		return false;
+	    	}
+	    	
+	    	nip=ip;
+	    	aip=ip_ntoa(ip);
+	    	return true;
+	    }
+	}
+	
+    public NetIf getWifi() 
+    {
+    	NetIf wifi=new NetIf();
     	try
     	{
-	        WifiManager wifi = (WifiManager) getSystemService(Context.WIFI_SERVICE);    
-	        WifiInfo info = wifi.getConnectionInfo();    
-	        return info.getMacAddress().toUpperCase();    
+	        WifiManager mWifi = (WifiManager) getSystemService(Context.WIFI_SERVICE);    
+	        WifiInfo info = mWifi.getConnectionInfo();
+	        int ip=info.getIpAddress();
+	        if(ip==0)
+	        {
+	        	return null;
+	        }
+	        
+	        wifi.setIp(ip);
+	        Log.i("getWifiIP", wifi.aip);
+	        wifi.amac=info.getMacAddress().toUpperCase();
+	        return wifi;
     	}
     	catch(Exception ex)
     	{
