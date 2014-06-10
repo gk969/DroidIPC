@@ -80,16 +80,11 @@ public class MainActivityIPC extends Activity
 	private TextView tvFps;
 	private TextView tvIp;
 	
-	private int vidSerial;
 	Timer timCam;
 	
-	final int VID_FILE_FIFO_SIZE=5;
+	private enum MSG{TIMER_FPS};
 	
-	final int MSG_TIMER_FPS=1;
 	final int FPS_INTVAL=500;
-	
-	final int MSG_TIMER_REC=2;
-	final int REC_INTERVAL=10000;
 	
 	hldMsg mMsgHld;
 
@@ -97,9 +92,7 @@ public class MainActivityIPC extends Activity
 	
 	private cFpsCalc fpsCalc;
 
-    private static final int DLG_CAM_ERROR = 1;
-    private static final int DLG_NO_STORAGE = 2;
-    private static final int DLG_WIFI_LOST = 3;
+    private enum DLG{CAM_ERROR, NO_STORAGE, WIFI_LOST};
     
     public Dialog sysFaultAlert(String title, String desc, final boolean exit)
     {
@@ -116,19 +109,21 @@ public class MainActivityIPC extends Activity
         .create();
     }
     
-    protected Dialog onCreateDialog(int dlgID) 
+    @Override
+    protected Dialog onCreateDialog(int dlgId) 
     {
-        switch(dlgID)
+        DLG dlg=DLG.values()[dlgId];
+    	switch(dlg)
         {
-        	case DLG_CAM_ERROR:
+        	case CAM_ERROR:
         	{
         		return sysFaultAlert("相机", "无法打开摄像头", true);
         	}
-        	case DLG_NO_STORAGE:
+        	case NO_STORAGE:
         	{
         		return sysFaultAlert("存储器", "SD卡不存在或未挂载", true);
         	}
-        	case DLG_WIFI_LOST:
+        	case WIFI_LOST:
         	{
         		return sysFaultAlert("WIFI", "WIFI未连接", true);
         	}
@@ -152,11 +147,11 @@ public class MainActivityIPC extends Activity
 		
 		tvFps = (TextView)findViewById(R.id.tvFps);
 		tvIp=(TextView)findViewById(R.id.tvIp);
-		
+
 		NetIf wifi=getWifi();
 		if(wifi==null)
 		{
-			showDialog(DLG_WIFI_LOST);
+			showDialog(DLG.WIFI_LOST.ordinal());
 		}
 		else
 		{
@@ -201,53 +196,15 @@ public class MainActivityIPC extends Activity
 		@Override
 		public void handleMessage(Message msg)
 		{
-			switch(msg.what)
+			MSG msgId=MSG.values()[msg.what];
+			switch(msgId)
 			{
-				case MSG_TIMER_FPS:
+				case TIMER_FPS:
 				{
 					tvFps.setText("FPS:"+fpsCalc.fps);
 					break;
 				}
-				case MSG_TIMER_REC:
-				{
-					Log.i("handleMessage", "timer REC "+Thread.currentThread().getName());
-					
-					File webDir;
-					webDir=getWebDir();
-					if(webDir!=null)
-					{
-						if (isRecording)
-						{
-							mCamView.stopRec();
-							httpSvr.newVidNm=VidFileName(vidSerial);
-							vidSerial++;
-							File vidFile = new File(webDir, VidFileName(vidSerial));
-							if(vidSerial>=VID_FILE_FIFO_SIZE)
-							{
-								File oldFile = new File(webDir, "VID_" + (vidSerial-VID_FILE_FIFO_SIZE) + ".MP4");
-								if(oldFile.exists())
-								{
-									if(!oldFile.delete())
-									{
-										Log.i("camRec", "oldFile.delete() Fail!");
-									}
-								}
-							}
-							mCamView.startRec(vidFile);
-						}
-						else
-						{
-							vidSerial=0;
-							File vidFile = new File(webDir, VidFileName(vidSerial));
-							if(mCamView.startRec(vidFile))
-							{
-								isRecording=true;
-							}
-						}
-					}
-					
-					break;
-				}
+				
 				default:
 					break;
 			}
@@ -270,7 +227,7 @@ public class MainActivityIPC extends Activity
 		mCamView = new CamView(this, new CamPreviewCB());
 		if(mCamView.mCamera==null)
 		{
-			showDialog(DLG_CAM_ERROR);
+			showDialog(DLG.CAM_ERROR.ordinal());
 		}
 		else
 		{
@@ -285,19 +242,10 @@ public class MainActivityIPC extends Activity
 				@Override
 				public void run()
 				{
-					mMsgHld.sendMsg(MSG_TIMER_FPS);
+					mMsgHld.sendMsg(MSG.TIMER_FPS.ordinal());
 				}
 			},FPS_INTVAL, FPS_INTVAL);
 			
-			
-			timCam.schedule(new TimerTask()
-			{
-				@Override
-				public void run()
-				{
-					mMsgHld.sendMsg(MSG_TIMER_REC);
-				}
-			}, 100, REC_INTERVAL);
 			
 			
 			mCamView.setOnClickListener(new View.OnClickListener()
@@ -361,8 +309,6 @@ public class MainActivityIPC extends Activity
 		@Override
 		public void onPreviewFrame(byte[] data, Camera camera)
 		{
-			// TODO Auto-generated method stub
-
 			long curTimems=System.currentTimeMillis();
 			fpsCalc.frmCnt++;
 			if((curTimems-fpsCalc.timeMs)>FPS_INTVAL)
@@ -370,10 +316,7 @@ public class MainActivityIPC extends Activity
 				fpsCalc.fps=(int) (1000*fpsCalc.frmCnt/(curTimems-fpsCalc.timeMs));
 				fpsCalc.frmCnt=0;
 				fpsCalc.timeMs=curTimems;
-				//tvFps.setText("FPS:"+fpsCalc.fps);
-
 			}
-			//playViewCB.drawBit(data, mCamView.mCamera);
 		}
 		
 	}
@@ -443,7 +386,7 @@ public class MainActivityIPC extends Activity
 		}
 		else
 		{
-			showDialog(DLG_NO_STORAGE);
+			showDialog(DLG.NO_STORAGE.ordinal());
 		}
 		
 		return dir;
@@ -475,8 +418,8 @@ public class MainActivityIPC extends Activity
 			return false;
 		}
 		
-		int[] webFileRawId={R.raw.index, R.raw.jquery211min};
-		String[] webFileName={"index.html", "jquery211min.js"};
+		int[] webFileRawId={R.raw.index, R.raw.player, R.raw.player_controler, R.raw.player_object, R.raw.style};
+		String[] webFileName={"index.html", "player.js", "player_controler.swf", "player_object.swf", "style.css"};
 		final int webFileNum=webFileRawId.length;
 		if(webFileNum!=webFileName.length)
 		{
@@ -544,9 +487,9 @@ public class MainActivityIPC extends Activity
 	    {
 	    	if(ipInt!=0)
 	    	{
-	    		return new StringBuilder().append(((ipInt >> 24) & 0xff)).append('.')
-	                .append((ipInt >> 16) & 0xff).append('.').append(
-	                        (ipInt >> 8) & 0xff).append('.').append((ipInt & 0xff))
+	    		return new StringBuilder().append((ipInt & 0xff)).append('.')
+	                .append((ipInt >> 8) & 0xff).append('.').append(
+	                        (ipInt >> 16) & 0xff).append('.').append((ipInt >> 24) & 0xff)
 	                .toString();
 	    	}
 	    	return null;
