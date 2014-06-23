@@ -1,77 +1,42 @@
-<html><head>
-<meta http-equiv="content-type" content="text/html; charset=UTF-8">
-<!-- A minimal Flowplayer setup to get you started -->
-  
+<!DOCTYPE html
+PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" 
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>DroidIPC!</title>
+	<script src="./jquery211min.js"></script>
+</head>
 
-	<!-- 
-		include flowplayer JavaScript file that does  
-		Flash embedding and provides the Flowplayer API.
-	-->
-	<script type="text/javascript" src="player.js"></script>
-	
-	<!-- some minimal styling, can be removed -->
-	<link rel="stylesheet" type="text/css" href="style.css">
-	
-	<!-- page title -->
-	<title>Android IP Camera</title>
-
-</head><body>
-
-	<div id="page">
-		
-		<h1>Android IP Camera</h1>
-	
-		<p>Click play button to view your android phone's camera</p>
-		
-		<!-- this A tag is where your Flowplayer will be placed. it can be anywhere -->
-		<a  
-			 href="live.flv"
-			 style="display:block;width:640px;height:480px"  
-             id="player">
-		</a> 
-	
-		<!-- this will install flowplayer inside previous A- tag. -->
-		<script>
-			flowplayer("player", "player_object.swf",{
-                        clip: {
-                            autoPlay: false,
-                            live: true,
-                            scaling: 'fit',
-                        },
-                        
-                        plugins: {
-                            controls: {
-                                url: 'player_controler.swf',
-                                playlist: false,
-                                fullscreen: true,
-                                volume: false,
-                                mute: false,
-                                stop: true,
-                                scrubber: false
-                                }
-                       }
-                    });
-		</script>
-	
-		<!-- 
-			after this line is purely informational stuff. 
-			does not affect on Flowplayer functionality 
-		-->
-		<p class="less">
-			If video is not smoothing, you can pause player for a while.
-		</p>
-		
-		<h2>About</h2>
-        
-        <p>
-			The project home page on <a href="http://code.google.com/p/ipcamera-for-android/">Google code</a> 
-		</p>
-
-		<p>
-		    If you have any problem please send mail to achang.zhou@gmail.com 
-		</p>
-		
+<body style="margin:auto; width:800px; text-align:center;">
+	<div style="font:60px/120px 'microsoft yahei';margin-top:30px;">DroidIPC</div>
+	<div id="vidBox" style="margin-top:50px;background:#F0F0F0;text-align:center;box-shadow: 0 0 20px #888;border-radius:20px;">
+		<img id="camImg" width="640"></img>
 	</div>
+
+</body>
+
+<script type="text/javascript">
+function e(id){
+	return document.getElementById(id);
+}
+var imgNum=0;
+function setImgSrc(num){
+	e("camImg").src="./pic"+num+".jpg";
+}
+setImgSrc(imgNum);
+e("camImg").onload=function(){
+	var vidMargin=(e("vidBox").clientWidth-this.clientWidth)/2;
+	e("vidBox").style.height=2+this.clientHeight+"px";
+	this.style.marginTop="1px";
 	
-	
-</body></html>
+	imgNum++;
+	setImgSrc(imgNum);
+}
+e("camImg").onerror=function(){
+	imgNum=0;
+	setTimeout("setImgSrc(imgNum)", 100);
+}
+
+</script>
+</html>

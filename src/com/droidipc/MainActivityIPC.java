@@ -85,6 +85,7 @@ public class MainActivityIPC extends Activity
 	private enum MSG{TIMER_FPS};
 	
 	final int FPS_INTVAL=500;
+	final int HTTP_PORT=8080;
 	
 	hldMsg mMsgHld;
 
@@ -178,17 +179,12 @@ public class MainActivityIPC extends Activity
 		{
 			try
 			{
-				httpSvr=new HttpServer(8080, webDir);
+				httpSvr=new HttpServer(HTTP_PORT, webDir);
 			} catch (IOException e)
 			{
 				e.printStackTrace();
 			}
 		}
-	}
-	
-	public String VidFileName(int serial)
-	{
-		return "VID_"+serial+".MP4";
 	}
 	
 	private class hldMsg extends Handler
@@ -317,6 +313,8 @@ public class MainActivityIPC extends Activity
 				fpsCalc.frmCnt=0;
 				fpsCalc.timeMs=curTimems;
 			}
+			
+			httpSvr.setImgData(data, mCamView.prevSize.width, mCamView.prevSize.height);
 		}
 		
 	}
@@ -417,9 +415,9 @@ public class MainActivityIPC extends Activity
 		{
 			return false;
 		}
-		
-		int[] webFileRawId={R.raw.index, R.raw.player, R.raw.player_controler, R.raw.player_object, R.raw.style};
-		String[] webFileName={"index.html", "player.js", "player_controler.swf", "player_object.swf", "style.css"};
+
+		int[] webFileRawId={R.raw.index, R.raw.jquery211min};
+		String[] webFileName={"index.html", "jquery211min.js"};
 		final int webFileNum=webFileRawId.length;
 		if(webFileNum!=webFileName.length)
 		{
