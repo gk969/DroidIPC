@@ -1,6 +1,9 @@
 package com.droidipc;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Properties;
@@ -19,10 +22,9 @@ public class HttpServer extends NanoHTTPD
     
     
     private byte[] imgData;
-    private File imgFile;
+    ByteArrayOutputStream imgStream;
     
     boolean imgDataInUse=false;
-    boolean imgFileInServe=false;
     int imgWidth;
     int imgHeight;
     
@@ -30,11 +32,13 @@ public class HttpServer extends NanoHTTPD
 	{
 		super(port, webDir);
 		homeDir=webDir;
+		imgData=null;
+		imgStream =new ByteArrayOutputStream();
 	}
 	
 	public void setImgData(byte[] data, int imgWid, int imgHei)
 	{
-		if(!imgDataInUse)
+		if((!imgDataInUse)&&(data!=null))
 		{
 			imgData=data;
 			
@@ -44,19 +48,29 @@ public class HttpServer extends NanoHTTPD
 		
 	}
 	
-	private void NV21toJpgFile(String fileName)
+	private void NV21toJpgStream()
 	{
-		imgFile = new File(homeDir, fileName);
+		if(imgData==null)
+		{
+			return;
+		}
+		
+		//imgFile = new File(homeDir, fileName);
+		
 		
 		imgDataInUse=true;
-		YuvImage yuv=new YuvImage(imgData, ImageFormat.NV21, imgWidth, imgHeight, null);
+		YuvImage yuv=new YuvImage(imgData, ImageFormat.NV21, 
+								  imgWidth, imgHeight, null);
 		imgDataInUse=false;
-		Log.i(LOG_TAG, "NV21toJpgFile "+fileName);
 		try
 		{
-			FileOutputStream fos = new FileOutputStream(imgFile);
+			imgStream.reset();
+			long tim=System.currentTimeMillis();
 			yuv.compressToJpeg(new Rect(0, 0, imgWidth, imgHeight),
-                    90, fos);
+                    90, imgStream);
+			tim=System.currentTimeMillis()-tim;
+			Log.i(LOG_TAG, "compressToJpeg time:"+tim+"ms size:"+
+				  imgStream.size()+" "+(imgStream.size()/1024)+"KB");
 		}catch(Exception e)
 		{
 			e.printStackTrace();
@@ -71,12 +85,25 @@ public class HttpServer extends NanoHTTPD
         String target=uri.toString().substring(1);
         
         Log.i(LOG_TAG, "target "+target);
-        if(target.length()>7)
+        
+        int len=target.length();
+        if(len>7)
         {
-	        if(target.substring(0, 3).equals("pic"))
+	        if(target.substring(0, 3).equals("pic")&&
+	           target.substring(len-4, len).equals(".jpg"))
 	        {
-	        	NV21toJpgFile(target);
-	        	imgFileInServe=true;
+	        	long tim=System.currentTimeMillis();
+	        	NV21toJpgStream();
+				tim=System.currentTimeMillis()-tim;
+				Log.i(LOG_TAG, "NV21toJpgStream "+tim+"ms");
+				
+				String mime = "image/jpeg";
+				Response res = new Response( HTTP_OK, mime, 
+						new ByteArrayInputStream(imgStream.toByteArray()));
+				res.addHeader( "Content-Length", "" + imgStream.size());
+				//res.addHeader( "ETag", etag);
+				res.addHeader( "Accept-Ranges", "bytes");
+				return res;
 	        }
         }
         return serveFile( uri, header, homeDir, true); 
@@ -86,15 +113,6 @@ public class HttpServer extends NanoHTTPD
 	public void serveDone(Response r)
 	{
 		Log.i(LOG_TAG, "serveDone status:"+r.status+
-					" mimeType:"+r.mimeType+" header:"+r.header.toString());
-		
-		if(imgFileInServe)
-		{
-			if(imgFile.isFile() && imgFile.exists())
-			{
-				imgFile.delete();
-			}
-			imgFileInServe=false;
-		}
+			" mimeType:"+r.mimeType+" header:"+r.header.toString());
 	}
 }

@@ -32,6 +32,7 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceHolder.Callback;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.ViewGroup.LayoutParams;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -93,7 +94,7 @@ public class MainActivityIPC extends Activity
 	
 	private cFpsCalc fpsCalc;
 
-    private enum DLG{CAM_ERROR, NO_STORAGE, WIFI_LOST};
+    private enum DLG{CAM_ERROR, NO_STORAGE, WIFI_LOST, STORAGE_ERROR};
     
     public Dialog sysFaultAlert(String title, String desc, final boolean exit)
     {
@@ -127,6 +128,10 @@ public class MainActivityIPC extends Activity
         	case WIFI_LOST:
         	{
         		return sysFaultAlert("WIFI", "WIFI未连接", true);
+        	}
+        	case STORAGE_ERROR:
+        	{
+        		return sysFaultAlert("存储器", "SD卡文件系统错误，请格式化", true);
         	}
         }
         
@@ -227,7 +232,20 @@ public class MainActivityIPC extends Activity
 		}
 		else
 		{
+			//mCamView.getHolder().setFixedSize(640, 480);
+			LayoutParams lp = framePreview.getLayoutParams();
+			
+			Display display =getWindowManager().getDefaultDisplay();
+			
+			Log.i("initCam", "screen:"+display.getWidth()+" "+display.getHeight());
+			Log.i("initCam", "mCamView:"+mCamView.ipcSize.width+" "+mCamView.ipcSize.height);
+			
+			lp.width = mCamView.ipcSize.width*display.getHeight()/
+						mCamView.ipcSize.height;
+			framePreview.setLayoutParams(lp);
+			
 			framePreview.addView(mCamView);
+			
 			fpsCalc = new cFpsCalc();
 			
 			mMsgHld = new hldMsg();
@@ -314,9 +332,12 @@ public class MainActivityIPC extends Activity
 				fpsCalc.timeMs=curTimems;
 			}
 			
-			httpSvr.setImgData(data, mCamView.prevSize.width, mCamView.prevSize.height);
+			if(httpSvr!=null)
+			{
+				httpSvr.setImgData(data, mCamView.ipcSize.width, 
+						mCamView.ipcSize.height);
+			}
 		}
-		
 	}
 	
 	public class TakePicAfterFocus implements AutoFocusCallback
@@ -378,9 +399,17 @@ public class MainActivityIPC extends Activity
 								File.separator + getString(R.string.app_name));
 			if(!dir.exists())
 			{
+				Log.i("getAppDir", "Dir:"+dir.toString()+" Not Exist!");
 				dir.mkdir();
+				if(!dir.exists())
+				{
+					showDialog(DLG.STORAGE_ERROR.ordinal());
+				}
 			}
-			Log.i("getAppDir", "Dir:"+dir.toString());
+			else
+			{
+				Log.i("getAppDir", "Dir:"+dir.toString()+" Already Exist!");
+			}
 		}
 		else
 		{
@@ -546,6 +575,8 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	Camera mCamera;
 	Camera.Size picSize;
 	Camera.Size prevSize;
+	final static int IPC_WIDTH=640;
+	Camera.Size ipcSize;
 
 
 	CamView(Context context, CamPreviewCB camPreviewCB)
@@ -592,10 +623,25 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			}
 			Log.i("PictureSizes Used", "width:"+picSize.width+" height:"+picSize.height); 
 			
+			//查找与宽度IPC_WIDTH相近的预览尺寸，作为IPC传输的默认尺寸。
+			ipcSize=PreviewSizes.get(0);
+			widDiff=Math.abs(picSize.width-IPC_WIDTH);
+			for(int i=0; i<PreviewSizes.size(); i++)
+			{
+				int curDiff=Math.abs(PreviewSizes.get(i).width-IPC_WIDTH);
+				if(widDiff>curDiff)
+				{
+					ipcSize.width=PreviewSizes.get(i).width;
+					ipcSize.height=PreviewSizes.get(i).height;
+					widDiff=curDiff;
+				}
+			}
+			Log.i("IPC sizes Used", "width:"+ipcSize.width+" height:"+ipcSize.height); 
+			
 			
 			parameters.setPictureFormat(PixelFormat.JPEG);
 			parameters.setPictureSize(picSize.width, picSize.height);//(picSize.width, picSize.height);
-			parameters.setPreviewSize(prevSize.width, prevSize.height);
+			parameters.setPreviewSize(ipcSize.width, ipcSize.height);
 			parameters.setJpegQuality(100);
 			//parameters.get
 			mCamera.setParameters(parameters);
@@ -605,6 +651,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			mHolder = this.getHolder();
 			mHolder.addCallback(this);
 			mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+			
 		}
 	}
 	
@@ -737,10 +784,12 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		if(mCamera!=null)
 		{
 			mCamera.setPreviewCallback(previewCallBack);
+			/*
 			Camera.Parameters parameters = mCamera.getParameters();
 			parameters.setPreviewSize(w, h);
 			Log.i("DroidIPC", "surfaceChanged format:"+format+" size:"+w+","+h); 
 			mCamera.setParameters(parameters);
+			*/
 			mCamera.startPreview();
 		}
 		

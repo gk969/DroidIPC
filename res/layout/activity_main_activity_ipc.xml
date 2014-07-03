@@ -3,6 +3,7 @@
     android:layout_width="fill_parent"
     android:layout_height="fill_parent"
     android:gravity="top"
+    android:background="#404040"
     tools:context=".MainActivityIPC" >
 
     <FrameLayout
@@ -10,9 +11,7 @@
         android:layout_width="fill_parent"
         android:layout_height="fill_parent"
         android:layout_alignParentLeft="true"
-        android:layout_alignParentTop="true" >
-
-    </FrameLayout>
+        android:layout_alignParentTop="true" />
     
     <TextView
         android:id="@+id/tvFps"
@@ -45,15 +44,7 @@
         android:id="@+id/buttonRec"
         android:layout_width="75dp"
         android:layout_height="50dp"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentLeft="true"
-        android:text="@string/record" />
-
-    
-    <SurfaceView
-        android:id="@+id/SurfaceViewPlayback"
-        android:layout_width="75dp"
-        android:layout_height="75dp"
+        android:layout_alignParentTop="true"
         android:layout_alignParentRight="true"
-        android:layout_centerVertical="true"/>
+        android:text="@string/record" />
 </RelativeLayout>

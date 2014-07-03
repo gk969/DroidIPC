@@ -9,20 +9,23 @@ PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
 </head>
 
 <body style="margin:auto; width:800px; text-align:center;">
-	<div style="font:60px/120px 'microsoft yahei';margin-top:30px;">DroidIPC</div>
-	<div id="vidBox" style="margin-top:50px;background:#F0F0F0;text-align:center;box-shadow: 0 0 20px #888;border-radius:20px;">
+	<div style="font:60px/80px 'microsoft yahei';margin-top:30px;">DroidIPC</div>
+	<div id="fps" style="height:40px; font:30px/40px 'microsoft yahei'; text-align:left; margin-left:600px;"></div>
+	<div id="vidBox" style="margin-top:10px;background:#F0F0F0;text-align:center;box-shadow: 0 0 20px #888;border-radius:20px;">
 		<img id="camImg" width="640"></img>
 	</div>
-
 </body>
 
 <script type="text/javascript">
 function e(id){
 	return document.getElementById(id);
 }
+
 var imgNum=0;
+var clientId=Math.floor(Math.random()*100000);
+var frmCnt=0;
 function setImgSrc(num){
-	e("camImg").src="./pic"+num+".jpg";
+	e("camImg").src="./pic"+clientId+"-"+num+".jpg";
 }
 setImgSrc(imgNum);
 e("camImg").onload=function(){
@@ -30,13 +33,22 @@ e("camImg").onload=function(){
 	e("vidBox").style.height=2+this.clientHeight+"px";
 	this.style.marginTop="1px";
 	
+	frmCnt++;
+	
 	imgNum++;
 	setImgSrc(imgNum);
 }
+
 e("camImg").onerror=function(){
 	imgNum=0;
-	setTimeout("setImgSrc(imgNum)", 100);
+	setTimeout("setImgSrc(imgNum)", 300);
 }
+
+function fpsCal(){
+	e("fps").innerHTML="FPS:"+(frmCnt/2).toFixed(1);
+	frmCnt=0;
+}
+setInterval("fpsCal()", 2000);
 
 </script>
 </html>
