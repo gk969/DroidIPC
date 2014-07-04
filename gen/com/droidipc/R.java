@@ -35,7 +35,8 @@ public final class R {
     }
     public static final class raw {
         public static final int index=0x7f040000;
-        public static final int jquery211min=0x7f040001;
+        public static final int jquery=0x7f040001;
+        public static final int proc=0x7f040002;
     }
     public static final class string {
         public static final int app_name=0x7f060000;

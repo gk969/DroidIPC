@@ -445,8 +445,8 @@ public class MainActivityIPC extends Activity
 			return false;
 		}
 
-		int[] webFileRawId={R.raw.index, R.raw.jquery211min};
-		String[] webFileName={"index.html", "jquery211min.js"};
+		int[] webFileRawId={R.raw.index, R.raw.proc};
+		String[] webFileName={"index.html", "proc.js"};
 		final int webFileNum=webFileRawId.length;
 		if(webFileNum!=webFileName.length)
 		{

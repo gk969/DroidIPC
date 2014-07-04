@@ -5,7 +5,7 @@ PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
 <head>
 	<meta charset="utf-8">
 	<title>DroidIPC!</title>
-	<script src="./jquery211min.js"></script>
+	<script src="./proc.js"></script>
 </head>
 
 <body style="margin:auto; width:800px; text-align:center;">
@@ -17,20 +17,17 @@ PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
 </body>
 
 <script type="text/javascript">
-function e(id){
-	return document.getElementById(id);
-}
 
 var imgNum=0;
 var clientId=Math.floor(Math.random()*100000);
 var frmCnt=0;
 function setImgSrc(num){
-	e("camImg").src="./pic"+clientId+"-"+num+".jpg";
+	$("camImg").src="./pic"+clientId+"-"+num+".jpg";
 }
 setImgSrc(imgNum);
-e("camImg").onload=function(){
-	var vidMargin=(e("vidBox").clientWidth-this.clientWidth)/2;
-	e("vidBox").style.height=2+this.clientHeight+"px";
+$("camImg").onload=function(){
+	var vidMargin=($("vidBox").clientWidth-this.clientWidth)/2;
+	$("vidBox").style.height=2+this.clientHeight+"px";
 	this.style.marginTop="1px";
 	
 	frmCnt++;
@@ -39,13 +36,13 @@ e("camImg").onload=function(){
 	setImgSrc(imgNum);
 }
 
-e("camImg").onerror=function(){
+$("camImg").onerror=function(){
 	imgNum=0;
 	setTimeout("setImgSrc(imgNum)", 300);
 }
 
 function fpsCal(){
-	e("fps").innerHTML="FPS:"+(frmCnt/2).toFixed(1);
+	$("fps").innerHTML="FPS:"+(frmCnt/2).toFixed(1);
 	frmCnt=0;
 }
 setInterval("fpsCal()", 2000);

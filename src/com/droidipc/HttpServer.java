@@ -67,7 +67,7 @@ public class HttpServer extends NanoHTTPD
 			imgStream.reset();
 			long tim=System.currentTimeMillis();
 			yuv.compressToJpeg(new Rect(0, 0, imgWidth, imgHeight),
-                    90, imgStream);
+                    60, imgStream);
 			tim=System.currentTimeMillis()-tim;
 			Log.i(LOG_TAG, "compressToJpeg time:"+tim+"ms size:"+
 				  imgStream.size()+" "+(imgStream.size()/1024)+"KB");
