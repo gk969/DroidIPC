@@ -26,6 +26,7 @@ function setImgSrc(num){
 }
 setImgSrc(imgNum);
 $("camImg").onload=function(){
+	$("camImg").style.display="inline";
 	var vidMargin=($("vidBox").clientWidth-this.clientWidth)/2;
 	$("vidBox").style.height=2+this.clientHeight+"px";
 	this.style.marginTop="1px";
@@ -37,6 +38,7 @@ $("camImg").onload=function(){
 }
 
 $("camImg").onerror=function(){
+	$("camImg").style.display="none";
 	imgNum=0;
 	setTimeout("setImgSrc(imgNum)", 300);
 }

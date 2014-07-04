@@ -55,9 +55,6 @@ public class HttpServer extends NanoHTTPD
 			return;
 		}
 		
-		//imgFile = new File(homeDir, fileName);
-		
-		
 		imgDataInUse=true;
 		YuvImage yuv=new YuvImage(imgData, ImageFormat.NV21, 
 								  imgWidth, imgHeight, null);

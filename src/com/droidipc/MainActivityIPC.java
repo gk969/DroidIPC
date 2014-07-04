@@ -174,7 +174,14 @@ public class MainActivityIPC extends Activity
 		super.onDestroy();
 		Log.i("onDestroy", "onDestroy");
 		if(timCam!=null)
+		{
 			timCam.cancel();
+		}
+		
+		if(httpSvr!=null)
+		{
+			httpSvr.stop();
+		}
 	}
 	
 	private void initServer()
@@ -232,18 +239,13 @@ public class MainActivityIPC extends Activity
 		}
 		else
 		{
-			//mCamView.getHolder().setFixedSize(640, 480);
-			LayoutParams lp = framePreview.getLayoutParams();
-			
 			Display display =getWindowManager().getDefaultDisplay();
 			
 			Log.i("initCam", "screen:"+display.getWidth()+" "+display.getHeight());
 			Log.i("initCam", "mCamView:"+mCamView.ipcSize.width+" "+mCamView.ipcSize.height);
 			
-			lp.width = mCamView.ipcSize.width*display.getHeight()/
-						mCamView.ipcSize.height;
-			framePreview.setLayoutParams(lp);
-			
+			mCamView.mHolder.setFixedSize(mCamView.ipcSize.width*display.getHeight()/
+										mCamView.ipcSize.height, display.getHeight());
 			framePreview.addView(mCamView);
 			
 			fpsCalc = new cFpsCalc();
