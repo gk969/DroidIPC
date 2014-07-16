@@ -3,7 +3,7 @@
     android:layout_width="fill_parent"
     android:layout_height="fill_parent"
     android:gravity="top"
-    android:background="#404040"
+    android:background="#606060"
     tools:context=".MainActivityIPC" >
 
     <FrameLayout

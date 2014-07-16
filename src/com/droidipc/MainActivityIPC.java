@@ -86,7 +86,7 @@ public class MainActivityIPC extends Activity
 	private enum MSG{TIMER_FPS};
 	
 	final int FPS_INTVAL=500;
-	final int HTTP_PORT=8080;
+	final int HTTP_PORT=9693;
 	
 	hldMsg mMsgHld;
 
@@ -180,7 +180,7 @@ public class MainActivityIPC extends Activity
 		
 		if(httpSvr!=null)
 		{
-			httpSvr.stop();
+			httpSvr.close();
 		}
 	}
 	
@@ -222,7 +222,7 @@ public class MainActivityIPC extends Activity
 		public void sendMsg(final int msg)
 		{
 			Message CMsg = new Message();
-			CMsg.what = msg;      
+			CMsg.what = msg;
 			this.sendMessage(CMsg);
 		}
 	}
