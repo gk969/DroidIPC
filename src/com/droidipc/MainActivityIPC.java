@@ -131,7 +131,7 @@ public class MainActivityIPC extends Activity
         	}
         	case STORAGE_ERROR:
         	{
-        		return sysFaultAlert("存储器", "SD卡文件系统错误，请格式化", true);
+        		return sysFaultAlert("存储器", "SD卡文件系统出错或或未连接", true);
         	}
         }
         
