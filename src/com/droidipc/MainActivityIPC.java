@@ -86,7 +86,7 @@ public class MainActivityIPC extends Activity
 	private enum MSG{TIMER_FPS};
 	
 	final int FPS_INTVAL=500;
-	final int HTTP_PORT=9693;
+	final int HTTP_PORT=8080;
 	
 	hldMsg mMsgHld;
 

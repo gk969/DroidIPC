@@ -20,63 +20,13 @@ public class HttpServer extends NanoHTTPD
     private File homeDir;
     final String LOG_TAG="HttpServer";
     
-    NV21toJpgThread compressThread;
-    
-    ByteArrayOutputStream imgStream;
-    
-    boolean imgStreamInUse=false;
-    boolean imgDataInUse=false;
-    
-    private byte[] imgData;
-    int imgWidth;
-    int imgHeight;
+    Cimg yuvImg;
     
 	public HttpServer(int port, File webDir) throws IOException
 	{
 		super(port, webDir);
 		homeDir=webDir;
-		imgData=null;
-		imgStream =new ByteArrayOutputStream();
-		
-		compressThread = new NV21toJpgThread();
-		compressThread.setDaemon(true);
-		compressThread.start();
-	}
-	
-	public class NV21toJpgThread extends Thread
-	{
-		public void run()
-		{
-			while(true)
-			{
-				Log.i("compressThread", "NV21 to Jpg");
-
-	        	long tim=System.currentTimeMillis();
-	        	NV21toJpgStream();
-				tim=System.currentTimeMillis()-tim;
-				Log.i(LOG_TAG, "NV21toJpgStream "+tim+"ms");
-	        	
-				pause();
-			}
-		}
-		
-
-	    public synchronized void pause()
-	    {
-	        try
-	        {
-	            wait();
-	        }
-	        catch(InterruptedException ie)
-	        {
-	            ie.printStackTrace();
-	        }
-	    }
-	    
-	    public synchronized void awake()
-	    {
-	        notifyAll();
-	    }
+		yuvImg=new Cimg();
 	}
 	
 	public void close()
@@ -84,138 +34,57 @@ public class HttpServer extends NanoHTTPD
 		this.stop();
 	}
 	
-	private class Cimg
+	public class Cimg
 	{
 		byte[] data;
 		int width;
 		int height;
 		
-		private boolean dataReady;
-		private boolean streamReady;
-		
-		public Cimg()
+		public void setImg(byte[] imgDat, int wid, int hei)
 		{
-			dataReady=false;
-			streamReady=false;
-		}
-		
-		public synchronized boolean dataIsReady()
-		{
-			return dataReady;
-		}
-		
-		public synchronized boolean streamIsReady()
-		{
-			return streamReady;
-		}
-		
-		public synchronized void setDataReady(boolean status)
-		{
-			dataReady=status;
-		}
-
-		public synchronized void setStreamReady(boolean status)
-		{
-			streamReady=status;
+			data=imgDat;
+			width=wid;
+			height=hei;
 		}
 	}
 	
-	public class CimgPool
+	private synchronized Cimg readOrWriteImgData(Cimg img, boolean isRead)
 	{
-		Cimg[] img;
-		
-		static final int IMG_POOL_SIZE=10;
-		
-		public CimgPool()
+		if(!isRead)
 		{
-			img=new Cimg[IMG_POOL_SIZE];
-			
-			for(int i=0; i<IMG_POOL_SIZE; i++)
-			{
-				img[i]=new Cimg();
-			}
+			yuvImg=img;
 		}
-		
-		public void setImgData(byte[] srcData, int width, int height)
-		{
-			for(int i=0; i<IMG_POOL_SIZE; i++)
-			{
-				if(!img[i].dataIsReady())
-				{
-					img[i].data=srcData;
-					img[i].width=width;
-					img[i].height=height;
-					img[i].setDataReady(true);
-				}
-			}
-		}
-		
-		public int getReadyStream()
-		{
-			int i;
-			for(i=0; i<IMG_POOL_SIZE; i++)
-			{
-				if(img[i].dataIsReady())
-				{
-					break;
-				}
-			}
-			YuvImage yuv=new YuvImage(imgData, ImageFormat.NV21, 
-									  imgWidth, imgHeight, null);
-			
-			try
-			{
-				imgStreamInUse=true;
-				imgStream.reset();
-				long tim=System.currentTimeMillis();
-				yuv.compressToJpeg(new Rect(0, 0, imgWidth, imgHeight),
-	                    60, imgStream);
-				imgStreamInUse=false;
-				//this.notifyAll();
-				tim=System.currentTimeMillis()-tim;
-				Log.i(LOG_TAG, "compressToJpeg time:"+tim+"ms size:"+
-					  imgStream.size()+" "+(imgStream.size()/1024)+"KB");
-			}catch(Exception e)
-			{
-				e.printStackTrace();
-			}
-			
-			
-		}
+		return yuvImg;
 	}
 	
-	public void setImgData(byte[] data, int imgWid, int imgHei)
+	public void setImgData(byte[] data, int width, int height)
 	{
-		if((!imgDataInUse)&&(data!=null))
-		{
-			imgData=data;
-			
-			imgWidth=imgWid;
-			imgHeight=imgHei;
-		}
-		
+		Cimg img=new Cimg();
+		img.setImg(data, width, height);
+		readOrWriteImgData(img, false);
 	}
 	
-	private void NV21toJpgStream()
+	public Cimg getImgdata()
 	{
-		if(imgData==null)
-		{
-			return;
-		}
+		return readOrWriteImgData(yuvImg, true);
+	}
+	
+	private ByteArrayOutputStream NV21toJpgStream(Cimg img)
+	{
+		if(img.data==null)
+			return null;
 		
-		imgDataInUse=true;
-		YuvImage yuv=new YuvImage(imgData, ImageFormat.NV21, 
-								  imgWidth, imgHeight, null);
-		imgDataInUse=false;
+		ByteArrayOutputStream imgStream=new ByteArrayOutputStream();
+		
+		YuvImage yuv=new YuvImage(img.data, ImageFormat.NV21, 
+								  img.width, img.height, null);
 		try
 		{
-			imgStreamInUse=true;
 			imgStream.reset();
 			long tim=System.currentTimeMillis();
-			yuv.compressToJpeg(new Rect(0, 0, imgWidth, imgHeight),
+			yuv.compressToJpeg(new Rect(0, 0, img.width, img.height),
                     60, imgStream);
-			imgStreamInUse=false;
-			//this.notifyAll();
+			
 			tim=System.currentTimeMillis()-tim;
 			Log.i(LOG_TAG, "compressToJpeg time:"+tim+"ms size:"+
 				  imgStream.size()+" "+(imgStream.size()/1024)+"KB");
@@ -224,6 +93,7 @@ public class HttpServer extends NanoHTTPD
 			e.printStackTrace();
 		}
 		
+		return imgStream;
 	}
 
 	@Override
@@ -240,9 +110,8 @@ public class HttpServer extends NanoHTTPD
 	        if(target.substring(0, 3).equals("pic")&&
 	           target.substring(len-4, len).equals(".jpg"))
 	        {
-	        	
 	        	long tim=System.currentTimeMillis();
-	        	NV21toJpgStream();
+	        	ByteArrayOutputStream imgStream=NV21toJpgStream(getImgdata());
 				tim=System.currentTimeMillis()-tim;
 				Log.i(LOG_TAG, "NV21toJpgStream "+tim+"ms");
 	        	
