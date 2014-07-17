@@ -15,38 +15,23 @@ import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.util.Log;
 
-public class HttpServer extends NanoHTTPD
+class Cimg
 {
-    private File homeDir;
-    final String LOG_TAG="HttpServer";
-    
-    Cimg yuvImg;
-    
-	public HttpServer(int port, File webDir) throws IOException
-	{
-		super(port, webDir);
-		homeDir=webDir;
-		yuvImg=new Cimg();
-	}
+	byte[] data;
+	int width;
+	int height;
 	
-	public void close()
+	public void setImg(byte[] imgDat, int wid, int hei)
 	{
-		this.stop();
+		data=imgDat;
+		width=wid;
+		height=hei;
 	}
-	
-	public class Cimg
-	{
-		byte[] data;
-		int width;
-		int height;
-		
-		public void setImg(byte[] imgDat, int wid, int hei)
-		{
-			data=imgDat;
-			width=wid;
-			height=hei;
-		}
-	}
+}
+
+class CsynImg
+{
+	Cimg yuvImg;
 	
 	private synchronized Cimg readOrWriteImgData(Cimg img, boolean isRead)
 	{
@@ -68,6 +53,27 @@ public class HttpServer extends NanoHTTPD
 	{
 		return readOrWriteImgData(yuvImg, true);
 	}
+}
+
+public class HttpServer extends NanoHTTPD
+{
+    private File homeDir;
+    final String LOG_TAG="HttpServer";
+    
+    CsynImg synImg;
+    
+	public HttpServer(int port, File webDir) throws IOException
+	{
+		super(port, webDir);
+		homeDir=webDir;
+		synImg=new CsynImg();
+	}
+	
+	public void close()
+	{
+		this.stop();
+	}
+	
 	
 	private ByteArrayOutputStream NV21toJpgStream(Cimg img)
 	{
@@ -111,7 +117,7 @@ public class HttpServer extends NanoHTTPD
 	           target.substring(len-4, len).equals(".jpg"))
 	        {
 	        	long tim=System.currentTimeMillis();
-	        	ByteArrayOutputStream imgStream=NV21toJpgStream(getImgdata());
+	        	ByteArrayOutputStream imgStream=NV21toJpgStream(synImg.getImgdata());
 				tim=System.currentTimeMillis()-tim;
 				Log.i(LOG_TAG, "NV21toJpgStream "+tim+"ms");
 	        	

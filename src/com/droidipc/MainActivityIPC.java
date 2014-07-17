@@ -336,7 +336,7 @@ public class MainActivityIPC extends Activity
 			
 			if(httpSvr!=null)
 			{
-				httpSvr.setImgData(data, mCamView.ipcSize.width, 
+				httpSvr.synImg.setImgData(data, mCamView.ipcSize.width, 
 						mCamView.ipcSize.height);
 			}
 		}
