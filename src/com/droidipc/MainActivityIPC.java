@@ -39,14 +39,20 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.InetAddress;
+import java.net.MalformedURLException;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Enumeration;
@@ -61,7 +67,7 @@ class cFpsCalc
 	long timeMs;
 	int frmCnt;
 	int fps;
-	
+
 	cFpsCalc()
 	{
 		timeMs=System.currentTimeMillis();
@@ -74,28 +80,30 @@ public class MainActivityIPC extends Activity
 {
 	private CamView mCamView;
 	private boolean isRecording;
-	
-	
+
+
 	private Button buttonTakePic;
 	private Button buttonRec;
 	private TextView tvFps;
 	private TextView tvIp;
-	
+
 	Timer timCam;
-	
+
 	private enum MSG{TIMER_FPS};
-	
+
 	final int FPS_INTVAL=500;
 	final int HTTP_PORT=8080;
-	
+
 	hldMsg mMsgHld;
 
 	HttpServer httpSvr;
 	
+	HttpDdnsClient httpDdnsClient;
+
 	private cFpsCalc fpsCalc;
 
     private enum DLG{CAM_ERROR, NO_STORAGE, WIFI_LOST, STORAGE_ERROR};
-    
+
     public Dialog sysFaultAlert(String title, String desc, final boolean exit)
     {
     	return new AlertDialog.Builder(this)
@@ -110,9 +118,9 @@ public class MainActivityIPC extends Activity
         })
         .create();
     }
-    
+
     @Override
-    protected Dialog onCreateDialog(int dlgId) 
+    protected Dialog onCreateDialog(int dlgId)
     {
         DLG dlg=DLG.values()[dlgId];
     	switch(dlg)
@@ -134,7 +142,7 @@ public class MainActivityIPC extends Activity
         		return sysFaultAlert("存储器", "SD卡文件系统出错或或未连接", true);
         	}
         }
-        
+
         return null;
     }
 
@@ -150,25 +158,26 @@ public class MainActivityIPC extends Activity
 		super.getWindow().addFlags(
 				WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 		setContentView(R.layout.activity_main_activity_ipc);
-		
+
 		tvFps = (TextView)findViewById(R.id.tvFps);
-		tvIp=(TextView)findViewById(R.id.tvIp);
 
 		NetIf wifi=getWifi();
 		if(wifi==null)
 		{
 			showDialog(DLG.WIFI_LOST.ordinal());
+			return;
 		}
-		else
-		{
-			tvIp.setText(wifi.aip+"   "+wifi.amac); 
-			
-			initCam();
-			
-			initServer();
-		}
+
+		tvIp=(TextView)findViewById(R.id.tvIp);
+		tvIp.setText(wifi.aip+"   "+wifi.amac);
+
+		camInit();
+
+		httpServerInit();
+
+		httpDdnsClient=new HttpDdnsClient();
 	}
-	
+
 	protected void onDestroy()
 	{
 		super.onDestroy();
@@ -177,14 +186,19 @@ public class MainActivityIPC extends Activity
 		{
 			timCam.cancel();
 		}
-		
+
 		if(httpSvr!=null)
 		{
 			httpSvr.close();
 		}
+		
+		if(httpDdnsClient!=null)
+		{
+			httpDdnsClient.stopServerLinkThread();
+		}
 	}
-	
-	private void initServer()
+
+	private void httpServerInit()
 	{
 		File webDir=getWebDir();
 		if(webFileToSD())
@@ -198,7 +212,7 @@ public class MainActivityIPC extends Activity
 			}
 		}
 	}
-	
+
 	private class hldMsg extends Handler
 	{
 		@Override
@@ -212,13 +226,13 @@ public class MainActivityIPC extends Activity
 					tvFps.setText("FPS:"+fpsCalc.fps);
 					break;
 				}
-				
+
 				default:
 					break;
 			}
 			super.handleMessage(msg);
 		}
-		
+
 		public void sendMsg(final int msg)
 		{
 			Message CMsg = new Message();
@@ -226,12 +240,12 @@ public class MainActivityIPC extends Activity
 			this.sendMessage(CMsg);
 		}
 	}
-	
-	
-	private void initCam()
+
+
+	private void camInit()
 	{
 		FrameLayout framePreview = (FrameLayout) findViewById(R.id.frameViewCam);
-		
+
 		mCamView = new CamView(this, new CamPreviewCB());
 		if(mCamView.mCamera==null)
 		{
@@ -240,18 +254,18 @@ public class MainActivityIPC extends Activity
 		else
 		{
 			Display display =getWindowManager().getDefaultDisplay();
-			
-			Log.i("initCam", "screen:"+display.getWidth()+" "+display.getHeight());
-			Log.i("initCam", "mCamView:"+mCamView.ipcSize.width+" "+mCamView.ipcSize.height);
-			
+
+			Log.i("camInit", "screen:"+display.getWidth()+" "+display.getHeight());
+			Log.i("camInit", "mCamView:"+mCamView.ipcSize.width+" "+mCamView.ipcSize.height);
+
 			mCamView.mHolder.setFixedSize(mCamView.ipcSize.width*display.getHeight()/
 										mCamView.ipcSize.height, display.getHeight());
 			framePreview.addView(mCamView);
-			
+
 			fpsCalc = new cFpsCalc();
-			
+
 			mMsgHld = new hldMsg();
-			
+
 			timCam = new Timer(true);
 			timCam.schedule(new TimerTask()
 			{
@@ -261,9 +275,9 @@ public class MainActivityIPC extends Activity
 					mMsgHld.sendMsg(MSG.TIMER_FPS.ordinal());
 				}
 			},FPS_INTVAL, FPS_INTVAL);
-			
-			
-			
+
+
+
 			mCamView.setOnClickListener(new View.OnClickListener()
 			{
 				public void onClick(View v)
@@ -314,11 +328,11 @@ public class MainActivityIPC extends Activity
 					}
 				}
 			});
-			
+
 		}
 
 	}
-	
+
 	public class CamPreviewCB implements Camera.PreviewCallback
 	{
 
@@ -333,15 +347,15 @@ public class MainActivityIPC extends Activity
 				fpsCalc.frmCnt=0;
 				fpsCalc.timeMs=curTimems;
 			}
-			
+
 			if(httpSvr!=null)
 			{
-				httpSvr.synImg.setImgData(data, mCamView.ipcSize.width, 
+				httpSvr.synImg.setImgData(data, mCamView.ipcSize.width,
 						mCamView.ipcSize.height);
 			}
 		}
 	}
-	
+
 	public class TakePicAfterFocus implements AutoFocusCallback
 	{
 		@Override
@@ -381,18 +395,18 @@ public class MainActivityIPC extends Activity
 
 				camera.setPreviewCallback(mCamView.previewCallBack);
 				camera.startPreview();
-				
+
 			} catch (Exception e)
 			{
 				Log.e("PictureCallback", e.toString());
 			}
 		}
 	}
-	
+
 	public File getAppDir()
 	{
 		File dir=null;
-		
+
 		//外部存储器存在
 		if(Environment.getExternalStorageState()
 		.equals(android.os.Environment.MEDIA_MOUNTED))
@@ -417,14 +431,14 @@ public class MainActivityIPC extends Activity
 		{
 			showDialog(DLG.NO_STORAGE.ordinal());
 		}
-		
+
 		return dir;
 	}
-	
+
 	public File getWebDir()
 	{
 		File dir=null;
-		
+
 		File appDir=getAppDir();
 		if(appDir!=null)
 		{
@@ -436,12 +450,12 @@ public class MainActivityIPC extends Activity
 		}
 		return dir;
 	}
-	
+
 	public boolean webFileToSD()
 	{
-		File webFile=null; 
+		File webFile=null;
 		File webDir=getWebDir();
-		
+
 		if(webDir==null)
 		{
 			return false;
@@ -454,7 +468,7 @@ public class MainActivityIPC extends Activity
 		{
 			return false;
 		}
-		
+
 		for(int i=0; i<webFileNum; i++)
 		{
 			webFile=new File(webDir, webFileName[i]);
@@ -463,7 +477,7 @@ public class MainActivityIPC extends Activity
 			{
 				InputStream rawIn = getResources().openRawResource(webFileRawId[i]);
 				FileOutputStream fos = new FileOutputStream(webFile);
-				
+
 		        int     length;
 		        byte[] buffer = new byte[1024*32];
 		        while((length = rawIn.read(buffer)) != -1)
@@ -481,7 +495,7 @@ public class MainActivityIPC extends Activity
 		}
 		return true;
 	}
-	
+
 	public String getLocalIp()
 	{
 	    try
@@ -490,7 +504,7 @@ public class MainActivityIPC extends Activity
 	        		en.hasMoreElements();)
 	        {
 	            NetworkInterface intf = en.nextElement();
-	            for (Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses(); 
+	            for (Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses();
 	            		enumIpAddr.hasMoreElements();)
 	            {
 	                InetAddress inetAddress = enumIpAddr.nextElement();
@@ -505,14 +519,14 @@ public class MainActivityIPC extends Activity
 	    }
 	    return null;
 	}
-	
+
 	public class NetIf
 	{
 		String aip;
 		int nip;
 		String amac;
 
-	    public String ip_ntoa(int ipInt) 
+	    public String ip_ntoa(int ipInt)
 	    {
 	    	if(ipInt!=0)
 	    	{
@@ -523,33 +537,33 @@ public class MainActivityIPC extends Activity
 	    	}
 	    	return null;
 	    }
-	    
+
 	    public boolean setIp(int ip)
 	    {
 	    	if(ip==0)
 	    	{
 	    		return false;
 	    	}
-	    	
+
 	    	nip=ip;
 	    	aip=ip_ntoa(ip);
 	    	return true;
 	    }
 	}
-	
-    public NetIf getWifi() 
+
+    public NetIf getWifi()
     {
     	NetIf wifi=new NetIf();
     	try
     	{
-	        WifiManager mWifi = (WifiManager) getSystemService(Context.WIFI_SERVICE);    
+	        WifiManager mWifi = (WifiManager) getSystemService(Context.WIFI_SERVICE);
 	        WifiInfo info = mWifi.getConnectionInfo();
 	        int ip=info.getIpAddress();
 	        if(ip==0)
 	        {
 	        	return null;
 	        }
-	        
+
 	        wifi.setIp(ip);
 	        Log.i("getWifiIP", wifi.aip);
 	        wifi.amac=info.getMacAddress().toUpperCase();
@@ -560,20 +574,20 @@ public class MainActivityIPC extends Activity
     		Log.e("getWifiMac", ex.toString());
     	}
     	return null;
-    }    
-	
+    }
+
 }
 
-	
+
 // ----------------------------------------------------------------------
 
 class CamView extends SurfaceView implements SurfaceHolder.Callback
 {
 	SurfaceHolder mHolder;
 	MediaRecorder mMediaRec;
-	
+
 	CamPreviewCB previewCallBack;
-	
+
 	Camera mCamera;
 	Camera.Size picSize;
 	Camera.Size prevSize;
@@ -584,14 +598,14 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	CamView(Context context, CamPreviewCB camPreviewCB)
 	{
 		super(context);
-		
+
 		previewCallBack=camPreviewCB;
-		
+
 		mCamera = Camera.open(0);
 		if(mCamera!=null)
 		{
 			Camera.Parameters parameters = mCamera.getParameters();
-			
+
 			//查找最大预览尺寸
 			List<Camera.Size> PreviewSizes=parameters.getSupportedPreviewSizes();
 			prevSize=PreviewSizes.get(0);
@@ -602,11 +616,11 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 					prevSize.width=PreviewSizes.get(i).width;
 					prevSize.height=PreviewSizes.get(i).height;
 				}
-				
-				Log.i("PreviewSizes", "width:"+PreviewSizes.get(i).width+" height:"+PreviewSizes.get(i).height); 
+
+				Log.i("PreviewSizes", "width:"+PreviewSizes.get(i).width+" height:"+PreviewSizes.get(i).height);
 			}
-			//Log.i("PreviewSizes", "width:"+prevSize.width+" height:"+prevSize.height); 
-			
+			//Log.i("PreviewSizes", "width:"+prevSize.width+" height:"+prevSize.height);
+
 			//查找与最大预览尺寸最接近的照片尺寸
 			List<Camera.Size> PictureSizes=parameters.getSupportedPictureSizes();
 			picSize=PictureSizes.get(0);
@@ -620,11 +634,11 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 					picSize.height=PictureSizes.get(i).height;
 					widDiff=curDiff;
 				}
-				
-				Log.i("PictureSizes", "width:"+PictureSizes.get(i).width+" height:"+PictureSizes.get(i).height); 
+
+				Log.i("PictureSizes", "width:"+PictureSizes.get(i).width+" height:"+PictureSizes.get(i).height);
 			}
-			Log.i("PictureSizes Used", "width:"+picSize.width+" height:"+picSize.height); 
-			
+			Log.i("PictureSizes Used", "width:"+picSize.width+" height:"+picSize.height);
+
 			//查找与宽度IPC_WIDTH相近的预览尺寸，作为IPC传输的默认尺寸。
 			ipcSize=PreviewSizes.get(0);
 			widDiff=Math.abs(picSize.width-IPC_WIDTH);
@@ -638,25 +652,25 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 					widDiff=curDiff;
 				}
 			}
-			Log.i("IPC sizes Used", "width:"+ipcSize.width+" height:"+ipcSize.height); 
-			
-			
+			Log.i("IPC sizes Used", "width:"+ipcSize.width+" height:"+ipcSize.height);
+
+
 			parameters.setPictureFormat(PixelFormat.JPEG);
 			parameters.setPictureSize(picSize.width, picSize.height);//(picSize.width, picSize.height);
 			parameters.setPreviewSize(ipcSize.width, ipcSize.height);
 			parameters.setJpegQuality(100);
 			//parameters.get
 			mCamera.setParameters(parameters);
-			
+
 			// Install a SurfaceHolder.Callback so we get notified when the
 			// underlying surface is created and destroyed.
 			mHolder = this.getHolder();
 			mHolder.addCallback(this);
 			mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
-			
+
 		}
 	}
-	
+
 	private void releaseMediaRecorder()
 	{
 		if (mMediaRec != null)
@@ -677,7 +691,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		{
 			return false;
 		}
-		
+
 		mMediaRec = new MediaRecorder();
 		mCamera.stopPreview();
 		mCamera.unlock();
@@ -717,7 +731,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		return true;
 
 	}
-	
+
 	public boolean startRec(File vidFile)
 	{
 		// initialize video camera
@@ -733,7 +747,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			return false;
 		}
 	}
-	
+
 	public void stopRec()
 	{
 		if(mMediaRec!=null)
@@ -765,7 +779,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	public void surfaceDestroyed(SurfaceHolder holder)
 	{
 		stopRec();
-		
+
 		// Surface will be destroyed when we return, so stop the preview.
 		// Because the CameraDevice object is not a shared resource, it's very
 		// important to release it when the activity is paused.
@@ -782,18 +796,18 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	{
 		// Now that the size is known, set up the camera parameters and begin
 		// the preview.
-		
+
 		if(mCamera!=null)
 		{
 			mCamera.setPreviewCallback(previewCallBack);
 			/*
 			Camera.Parameters parameters = mCamera.getParameters();
 			parameters.setPreviewSize(w, h);
-			Log.i("DroidIPC", "surfaceChanged format:"+format+" size:"+w+","+h); 
+			Log.i("DroidIPC", "surfaceChanged format:"+format+" size:"+w+","+h);
 			mCamera.setParameters(parameters);
 			*/
 			mCamera.startPreview();
 		}
-		
+
 	}
 }
