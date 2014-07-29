@@ -194,7 +194,7 @@ public class MainActivityIPC extends Activity
 		
 		if(httpDdnsClient!=null)
 		{
-			httpDdnsClient.stopServerLinkThread();
+			httpDdnsClient.stop();
 		}
 	}
 

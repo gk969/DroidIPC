@@ -25,6 +25,7 @@ function setImgSrc(num){
 	$("camImg").src="./pic"+clientId+"-"+num+".jpg";
 }
 setImgSrc(imgNum);
+
 $("camImg").onload=function(){
 	$("camImg").style.display="inline";
 	var vidMargin=($("vidBox").clientWidth-this.clientWidth)/2;
