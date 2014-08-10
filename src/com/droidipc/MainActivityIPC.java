@@ -10,10 +10,12 @@ import android.os.Message;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
+import android.text.Editable;
 import android.util.Log;
 import android.view.Menu;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.CompressFormat;
@@ -60,6 +62,9 @@ import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import com.droidipc.MainActivityIPC.CamPreviewCB;
 
 class cFpsCalc
@@ -81,24 +86,31 @@ public class MainActivityIPC extends Activity
 	private CamView mCamView;
 	private boolean isRecording;
 
+	private static final String LOG_TAG="MainActivityIPC";
 
 	private Button buttonTakePic;
 	private Button buttonRec;
+	private Button btLogin;
 	private TextView tvFps;
 	private TextView tvIp;
+	
+	private TextView tvLoginMsg;
 
 	Timer timCam;
 
-	private enum MSG{TIMER_FPS};
+	public static final int MSG_TIMER_FPS=0;
+	public static final int MSG_HTTP_LOGIN_SUCCESS=1;
+	public static final int MSG_HTTP_LOGIN_LINK_FAIL=2;
+	public static final int MSG_HTTP_LOGIN_AUTH_FAIL=3;
 
 	final int FPS_INTVAL=500;
-	final int HTTP_PORT=8080;
+	final int HTTP_PORT=9693;
 
-	hldMsg mMsgHld;
+	private hldMsg mMsgHld;
 
 	HttpServer httpSvr;
 	
-	HttpDdnsClient httpDdnsClient;
+	public static HttpDdnsClient httpDdnsClient;
 
 	private cFpsCalc fpsCalc;
 
@@ -150,11 +162,11 @@ public class MainActivityIPC extends Activity
 	protected void onCreate(Bundle savedInstanceState)
 	{
 		super.onCreate(savedInstanceState);
-		Log.i("DroidIPC", "onCreate");
+		Log.i(LOG_TAG, "onCreate");
 
-		requestWindowFeature(Window.FEATURE_NO_TITLE);
-		super.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-				WindowManager.LayoutParams.FLAG_FULLSCREEN);// FLAG_FULLSCREEN
+		//requestWindowFeature(Window.FEATURE_NO_TITLE);
+		//super.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+		//		WindowManager.LayoutParams.FLAG_FULLSCREEN);// FLAG_FULLSCREEN
 		super.getWindow().addFlags(
 				WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 		setContentView(R.layout.activity_main_activity_ipc);
@@ -169,19 +181,50 @@ public class MainActivityIPC extends Activity
 		}
 
 		tvIp=(TextView)findViewById(R.id.tvIp);
-		tvIp.setText(wifi.aip+"   "+wifi.amac);
+		tvIp.setText(wifi.ipStr+":"+HTTP_PORT+"   "+wifi.macStr);
 
+		tvLoginMsg=(TextView)findViewById(R.id.textViewMainLoginMsg);
+        
+		
 		camInit();
 
 		httpServerInit();
 
 		httpDdnsClient=new HttpDdnsClient();
+		//httpDdnsClient.start("gk969","sj299792458gk", mMsgHld);
 	}
 
+	protected void onStart()
+	{
+		super.onStart();
+		Log.i(LOG_TAG, "onStart");
+	}
+
+	protected void onResume()
+	{
+		super.onResume();
+		Log.i(LOG_TAG, "onResume");
+		
+		httpDdnsClient.setMsgHandler(mMsgHld);
+	}
+
+	protected void onPause()
+	{
+		super.onPause();
+		Log.i(LOG_TAG, "onPause");
+		
+	}
+
+	protected void onStop()
+	{
+		super.onStop();
+		Log.i(LOG_TAG, "onStop");
+	}
+	
 	protected void onDestroy()
 	{
 		super.onDestroy();
-		Log.i("onDestroy", "onDestroy");
+		Log.i(LOG_TAG, "onDestroy");
 		if(timCam!=null)
 		{
 			timCam.cancel();
@@ -197,7 +240,28 @@ public class MainActivityIPC extends Activity
 			httpDdnsClient.stop();
 		}
 	}
+	
 
+    @Override
+	protected void onActivityResult(int requestCode, int resultCode,
+		Intent data) {
+
+        if (requestCode == GET_CODE) {
+            if (resultCode == RESULT_CANCELED) {
+                Log.i(LOG_TAG, "cancelled!");
+                tvLoginMsg.setText("");
+            } else {
+                if (data != null) {
+                	String retStr=data.getAction();
+                    Log.i(LOG_TAG, retStr);
+                	tvLoginMsg.setText(retStr);
+                }
+            }
+        }
+    }
+
+    static final private int GET_CODE = 0;
+	
 	private void httpServerInit()
 	{
 		File webDir=getWebDir();
@@ -212,35 +276,63 @@ public class MainActivityIPC extends Activity
 			}
 		}
 	}
-
+	
 	private class hldMsg extends Handler
 	{
 		@Override
 		public void handleMessage(Message msg)
 		{
-			MSG msgId=MSG.values()[msg.what];
-			switch(msgId)
+			switch(msg.what)
 			{
-				case TIMER_FPS:
+				case MSG_TIMER_FPS:
 				{
 					tvFps.setText("FPS:"+fpsCalc.fps);
 					break;
 				}
 
+				case MSG_HTTP_LOGIN_SUCCESS:
+				{
+					String jsonStr=(String)(msg.obj);
+					Log.i(LOG_TAG, "httpRecv:"+jsonStr);
+					
+					JSONObject object;
+					try
+					{
+						object = new JSONObject(jsonStr);
+    					String ipcAddr = object.getString("ipc_addr");
+    					tvLoginMsg.setText("登录成功！外网IP："+ipcAddr+"已存入服务器。");
+    					
+					} catch (JSONException e)
+					{
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					
+					
+					break;
+				}
+				
+				case MSG_HTTP_LOGIN_AUTH_FAIL:
+				{
+					Log.i(LOG_TAG, "Server Login Auth Fail!");
+					tvLoginMsg.setText("登录失败，用户名或密码错误！");
+					break;
+				}
+
+				case MSG_HTTP_LOGIN_LINK_FAIL:
+				{
+					Log.i(LOG_TAG, "Server Login Link Fail!");
+					tvLoginMsg.setText("登录失败，无法连接服务器！");
+					break;
+				}
+				
 				default:
 					break;
 			}
 			super.handleMessage(msg);
 		}
 
-		public void sendMsg(final int msg)
-		{
-			Message CMsg = new Message();
-			CMsg.what = msg;
-			this.sendMessage(CMsg);
-		}
 	}
-
 
 	private void camInit()
 	{
@@ -255,8 +347,8 @@ public class MainActivityIPC extends Activity
 		{
 			Display display =getWindowManager().getDefaultDisplay();
 
-			Log.i("camInit", "screen:"+display.getWidth()+" "+display.getHeight());
-			Log.i("camInit", "mCamView:"+mCamView.ipcSize.width+" "+mCamView.ipcSize.height);
+			Log.i(LOG_TAG, "screen:"+display.getWidth()+" "+display.getHeight());
+			Log.i(LOG_TAG, "mCamView:"+mCamView.ipcSize.width+" "+mCamView.ipcSize.height);
 
 			mCamView.mHolder.setFixedSize(mCamView.ipcSize.width*display.getHeight()/
 										mCamView.ipcSize.height, display.getHeight());
@@ -272,7 +364,9 @@ public class MainActivityIPC extends Activity
 				@Override
 				public void run()
 				{
-					mMsgHld.sendMsg(MSG.TIMER_FPS.ordinal());
+					Message CMsg = new Message();
+					CMsg.what = MSG_TIMER_FPS;
+					mMsgHld.sendMessage(CMsg);
 				}
 			},FPS_INTVAL, FPS_INTVAL);
 
@@ -329,6 +423,17 @@ public class MainActivityIPC extends Activity
 				}
 			});
 
+			btLogin=(Button) findViewById(R.id.buttonLogin);
+			btLogin.setOnClickListener(new View.OnClickListener()
+			{
+				public void onClick(View v)
+				{
+		            Intent intent = new Intent(MainActivityIPC.this, ActivityLogin.class);
+		            //startActivity(intent);//直接切换Activity不接收返回结果
+		            startActivityForResult(intent, GET_CODE);
+				}
+			});
+			
 		}
 
 	}
@@ -472,7 +577,7 @@ public class MainActivityIPC extends Activity
 		for(int i=0; i<webFileNum; i++)
 		{
 			webFile=new File(webDir, webFileName[i]);
-			Log.i("webFileToSD", webFile.toString());
+			Log.i(LOG_TAG, webFile.toString());
 			try
 			{
 				InputStream rawIn = getResources().openRawResource(webFileRawId[i]);
@@ -489,7 +594,7 @@ public class MainActivityIPC extends Activity
 			}
 			catch(IOException ioe)
 			{
-				Log.e("webFileToSD", ioe.toString());
+				Log.e(LOG_TAG, ioe.toString());
 				return false;
 			}
 		}
@@ -515,16 +620,16 @@ public class MainActivityIPC extends Activity
 	            }
 	        }
 	    } catch (SocketException ex) {
-	        Log.e("getLocalIpAddress", ex.toString());
+	        Log.e(LOG_TAG, ex.toString());
 	    }
 	    return null;
 	}
 
 	public class NetIf
 	{
-		String aip;
-		int nip;
-		String amac;
+		String ipStr;
+		int ipInt;
+		String macStr;
 
 	    public String ip_ntoa(int ipInt)
 	    {
@@ -545,8 +650,8 @@ public class MainActivityIPC extends Activity
 	    		return false;
 	    	}
 
-	    	nip=ip;
-	    	aip=ip_ntoa(ip);
+	    	ipInt=ip;
+	    	ipStr=ip_ntoa(ip);
 	    	return true;
 	    }
 	}
@@ -565,13 +670,13 @@ public class MainActivityIPC extends Activity
 	        }
 
 	        wifi.setIp(ip);
-	        Log.i("getWifiIP", wifi.aip);
-	        wifi.amac=info.getMacAddress().toUpperCase();
+	        Log.i(LOG_TAG, wifi.ipStr);
+	        wifi.macStr=info.getMacAddress().toUpperCase();
 	        return wifi;
     	}
     	catch(Exception ex)
     	{
-    		Log.e("getWifiMac", ex.toString());
+    		Log.e(LOG_TAG, ex.toString());
     	}
     	return null;
     }
@@ -594,13 +699,18 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	final static int IPC_WIDTH=640;
 	Camera.Size ipcSize;
 
+	private static final String LOG_TAG="CamView";
 
 	CamView(Context context, CamPreviewCB camPreviewCB)
 	{
 		super(context);
 
 		previewCallBack=camPreviewCB;
+		openCamera();
+	}
 
+	private void openCamera()
+	{
 		mCamera = Camera.open(0);
 		if(mCamera!=null)
 		{
@@ -670,7 +780,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 		}
 	}
-
+	
 	private void releaseMediaRecorder()
 	{
 		if (mMediaRec != null)
@@ -760,6 +870,11 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 	public void surfaceCreated(SurfaceHolder holder)
 	{
+		Log.i(LOG_TAG, "surfaceCreated");
+		if(mCamera==null)
+		{
+			openCamera();
+		}
 		// The Surface has been created, acquire the camera and tell it where
 		// to draw.
 		if(mCamera != null)
@@ -778,6 +893,8 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 	public void surfaceDestroyed(SurfaceHolder holder)
 	{
+		Log.i(LOG_TAG, "surfaceDestroyed");
+		
 		stopRec();
 
 		// Surface will be destroyed when we return, so stop the preview.
@@ -796,6 +913,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	{
 		// Now that the size is known, set up the camera parameters and begin
 		// the preview.
+		Log.i(LOG_TAG, "surfaceChanged");
 
 		if(mCamera!=null)
 		{

@@ -11,26 +11,61 @@ import java.net.URL;
 import java.util.List;
 import java.util.Map;
 
+import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
 
 public class HttpDdnsClient
 {
 	private static final int LINK_INTERVAL=10000;
 	private static final String LOG_TAG="HttpDdnsClient";
-	private boolean threadRunning=true;
+	private boolean threadRunning;
 	private ServerLinkThread serverLinkThread;
 	
 	private String userName;
 	private String passWord;
+	private Handler msgHandler;
 	
 	public HttpDdnsClient()
 	{
 		serverLinkThread=new ServerLinkThread();
 		serverLinkThread.setDaemon(true);
-		linkServer("gk969", "23dd34s33");
+		threadRunning=false;
 	}
-
-	public class ServerLinkThread extends Thread
+	
+	
+	/********************** 对外接口 *********************/
+	
+	public void setAuth(String user, String pwd)
+	{
+		userName=user;
+		passWord=pwd;
+	}
+	
+	public void setMsgHandler(Handler handler)
+	{
+		msgHandler=handler;
+	}
+	
+	public void start()
+	{
+		threadRunning=true;
+		if(!serverLinkThread.isAlive())
+		{
+			serverLinkThread.start();
+		}
+	}
+	
+	public void stop()
+	{
+		threadRunning=false;
+	}
+	
+	
+	
+	/********************* 私有成员 *******************/
+	
+	private class ServerLinkThread extends Thread
 	{
 		public void run()
 		{
@@ -39,7 +74,7 @@ public class HttpDdnsClient
 				Log.i(LOG_TAG, "thread");
 				try
 				{
-					sendLinkMsg();
+					linkAndLogin();
 					sleep(LINK_INTERVAL);
 				} catch (InterruptedException e)
 				{
@@ -50,38 +85,59 @@ public class HttpDdnsClient
 		}
 	}
 	
-	public void linkServer(String user, String pwd)
+	private void linkAndLogin()
 	{
-		userName=user;
-		passWord=pwd;
+		String cookie=linkServer();
+		Message msg = new Message();
+		if(cookie!=null)
+		{
+			//通过返回的Cookie判断是否登陆成功
+			if(cookie.indexOf("wordpress_logged_in")>=0)
+			{
+				String retJson=ipcLogin(parseCookie(cookie));
+				
+				//未返回正常JSON包，服务器连接超时或出错
+				if(retJson==null)
+				{
+					Log.e(LOG_TAG, "Return JSON Error!"+retJson);
+					msg.what = MainActivityIPC.MSG_HTTP_LOGIN_LINK_FAIL;
+				}
+				else
+				{
+					msg.what = MainActivityIPC.MSG_HTTP_LOGIN_SUCCESS;
+					msg.obj=retJson;
+				}
+			}
+			//登录失败，用户名或密码错误
+			else
+			{
+				msg.what = MainActivityIPC.MSG_HTTP_LOGIN_AUTH_FAIL;
+			}
+		}
+		else
+		{
+			msg.what = MainActivityIPC.MSG_HTTP_LOGIN_LINK_FAIL;
+		}
 		
-		threadRunning=true;
-		serverLinkThread.start();
+		msgHandler.sendMessage(msg);
 	}
 	
-	public void stop()
+	private String linkServer()
 	{
-		threadRunning=false;
-	}
-	
-	private void sendLinkMsg()
-	{
-		final String LOG_TAG="httpDdnsClientInit";
+		String cookieStr=null;
 		
-		Log.i(LOG_TAG, LOG_TAG+" start");
+		Log.i(LOG_TAG, "linkServer start");
 		
 		try
 		{
-			//URL url=new URL("http://192.168.0.101");
 			URL url=new URL("http://gk969.com/wp-login.php");
 			HttpURLConnection urlConn=(HttpURLConnection)url.openConnection();
 			
 			String postAuthStr="log="+userName+"&pwd="+passWord+"&wp-submit=%E7%99%BB%E5%BD%95&redirect_to=http%3A%2F%2Fgk969.com%2Fwp-admin%2F&testcookie=1";
 			try
 			{
-				//urlConn.setChunkedStreamingMode(500);
-				urlConn.setConnectTimeout(5000);
-				urlConn.setReadTimeout(1000);
+				urlConn.setConnectTimeout(10000);
+				urlConn.setReadTimeout(5000);
 				urlConn.setDoOutput(true);
 				urlConn.setDoInput(true);
 				urlConn.setUseCaches(false);
@@ -95,48 +151,13 @@ public class HttpDdnsClient
 				
 				if(urlConn.getResponseCode()==200)
 				{
-					int hdrpos=0;
-					String hdr;
-					
 					Map<String, List<String>> header=urlConn.getHeaderFields();
 					List<String> cookie=header.get("Set-Cookie");
 					
-					Log.i(LOG_TAG, cookie.toString());
+					cookieStr=cookie.toString();
+					Log.i(LOG_TAG, "cookie:"+cookieStr);
 					
-					/*
-					for (String key : header.keySet())
-					{
-						Log.i(LOG_TAG, key+": "+header.get(key));
-					}
-					
-					//Log.i(LOG_TAG, header.toString());
-					
-					Log.i(LOG_TAG, urlConn.getHeaderField("Set-Cookie"));
-					
-					while((hdr=urlConn.getHeaderField(hdrpos))!=null)
-					{
-						Log.i(LOG_TAG, hdr);
-						hdrpos++;
-					}
-					*/
-					
-					/*
-					InputStreamReader in = new InputStreamReader(urlConn.getInputStream());
-					BufferedReader buffer = new BufferedReader(in);
-	                String inputLine = null;
-	                
-	                int lineCnt=0;
-	                while (((inputLine = buffer.readLine()) != null)&&(lineCnt<50))
-	                {
-	                	Log.i(LOG_TAG, inputLine);
-	                	lineCnt++;
-	                }
-		            
-	                in.close();
-	                */
 				}
-				
-				
 			}
 			finally
 			{
@@ -151,7 +172,95 @@ public class HttpDdnsClient
 			e.printStackTrace();
 		}
 		
-		
+		return cookieStr;
 	}
+	
+	private String parseCookie(String cookieIn)
+	{
+		String cookieOut="";
+		String oneCookie;
+		
+		cookieIn=cookieIn.substring(1);
+		
+		int offset=0;
+		
+		while(true)
+		{
+			int step=cookieIn.indexOf("; ", offset);
+			if(step>=0)
+			{
+				step+=2;
+				oneCookie=cookieIn.substring(offset, step);
+				Log.i(LOG_TAG, oneCookie);
+				offset=step;
+				cookieOut+=oneCookie;
+				
+				step=cookieIn.indexOf(", ", offset);
+				if(step>=0)
+				{
+					offset=step+=2;
+				}
+				else
+				{
+					break;
+				}
+			}
+			else
+			{
+				break;
+			}
+			
+		}
+		cookieOut=cookieOut.substring(0, cookieOut.length()-2);
+		Log.i(LOG_TAG, cookieOut);
+		return cookieOut;
+	}
+	
+	private String ipcLogin(String cookie)
+	{
+		Log.i(LOG_TAG, "ipcLogin start");
+		String retJson=null;
+		try
+		{
+			URL url=new URL("http://gk969.com/ipc/droidipc.php?=ipc-login");
+			HttpURLConnection urlConn=(HttpURLConnection)url.openConnection();
+			InputStreamReader in=null;
+			BufferedReader inBuffer=null;
+			try
+			{
+				urlConn.setConnectTimeout(5000);
+				urlConn.setReadTimeout(2000);
+				urlConn.setDoInput(true);
+				urlConn.setUseCaches(false);
+				urlConn.setRequestProperty("Cookie",cookie);
+				
+				if(urlConn.getResponseCode()==200)
+				{
+					in = new InputStreamReader(urlConn.getInputStream());
+					inBuffer = new BufferedReader(in);
+					
+					retJson=inBuffer.readLine();
+					Log.i(LOG_TAG, retJson);
+				}
+			}
+			finally
+			{
+				if(urlConn!=null)urlConn.disconnect(); 
+				if(in!=null)in.close();
+				if(inBuffer!=null)inBuffer.close();
+			}
+			
+		} catch (MalformedURLException e)
+		{
+			e.printStackTrace();
+		} catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+		
+		return retJson;
+	}
+
+
 	
 }
