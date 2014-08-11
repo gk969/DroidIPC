@@ -17,6 +17,11 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.Resources;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteDatabase.CursorFactory;
+import android.database.sqlite.SQLiteException;
+import android.database.sqlite.SQLiteOpenHelper;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.CompressFormat;
 import android.graphics.BitmapFactory;
@@ -75,9 +80,9 @@ class cFpsCalc
 
 	cFpsCalc()
 	{
-		timeMs=System.currentTimeMillis();
-		frmCnt=0;
-		fps=0;
+		timeMs = System.currentTimeMillis();
+		frmCnt = 0;
+		fps = 0;
 	}
 }
 
@@ -86,77 +91,83 @@ public class MainActivityIPC extends Activity
 	private CamView mCamView;
 	private boolean isRecording;
 
-	private static final String LOG_TAG="MainActivityIPC";
+	private static final String LOG_TAG = "MainActivityIPC";
 
 	private Button buttonTakePic;
 	private Button buttonRec;
 	private Button btLogin;
 	private TextView tvFps;
 	private TextView tvIp;
-	
+
 	private TextView tvLoginMsg;
 
 	Timer timCam;
 
-	public static final int MSG_TIMER_FPS=0;
-	public static final int MSG_HTTP_LOGIN_SUCCESS=1;
-	public static final int MSG_HTTP_LOGIN_LINK_FAIL=2;
-	public static final int MSG_HTTP_LOGIN_AUTH_FAIL=3;
+	static final private int GET_CODE = 0;
 
-	final int FPS_INTVAL=500;
-	final int HTTP_PORT=9693;
+	public static final int MSG_TIMER_FPS = 0;
+	public static final int MSG_HTTP_LOGIN_SUCCESS = 1;
+	public static final int MSG_HTTP_LOGIN_LINK_FAIL = 2;
+	public static final int MSG_HTTP_LOGIN_AUTH_FAIL = 3;
+
+	final int FPS_INTVAL = 500;
+	final int HTTP_PORT = 9693;
 
 	private hldMsg mMsgHld;
 
 	HttpServer httpSvr;
-	
+
 	public static HttpDdnsClient httpDdnsClient;
 
 	private cFpsCalc fpsCalc;
 
-    private enum DLG{CAM_ERROR, NO_STORAGE, WIFI_LOST, STORAGE_ERROR};
+	private enum DLG
+	{
+		CAM_ERROR, NO_STORAGE, WIFI_LOST, STORAGE_ERROR
+	};
 
-    public Dialog sysFaultAlert(String title, String desc, final boolean exit)
-    {
-    	return new AlertDialog.Builder(this)
-        .setTitle("哎呀 "+title+"粗问题了")
-        .setMessage(desc+"!"+(exit?",点击\"确定\"退出程序...":""))
-        .setPositiveButton("确定", new DialogInterface.OnClickListener(){
-            public void onClick(DialogInterface dialog, int whichButton){
-            	if(exit){
-            		MainActivityIPC.this.finish();
-            	}
-            }
-        })
-        .create();
-    }
+	public Dialog sysFaultAlert(String title, String desc, final boolean exit)
+	{
+		return new AlertDialog.Builder(this).setTitle("哎呀 " + title + "粗问题了")
+				.setMessage(desc + "!" + (exit ? ",点击\"确定\"退出程序..." : ""))
+				.setPositiveButton("确定", new DialogInterface.OnClickListener()
+				{
+					public void onClick(DialogInterface dialog, int whichButton)
+					{
+						if (exit)
+						{
+							MainActivityIPC.this.finish();
+						}
+					}
+				}).create();
+	}
 
-    @Override
-    protected Dialog onCreateDialog(int dlgId)
-    {
-        DLG dlg=DLG.values()[dlgId];
-    	switch(dlg)
-        {
-        	case CAM_ERROR:
-        	{
-        		return sysFaultAlert("相机", "无法打开摄像头", true);
-        	}
-        	case NO_STORAGE:
-        	{
-        		return sysFaultAlert("存储器", "SD卡不存在或未挂载", true);
-        	}
-        	case WIFI_LOST:
-        	{
-        		return sysFaultAlert("WIFI", "WIFI未连接", true);
-        	}
-        	case STORAGE_ERROR:
-        	{
-        		return sysFaultAlert("存储器", "SD卡文件系统出错或或未连接", true);
-        	}
-        }
+	@Override
+	protected Dialog onCreateDialog(int dlgId)
+	{
+		DLG dlg = DLG.values()[dlgId];
+		switch (dlg)
+		{
+		case CAM_ERROR:
+		{
+			return sysFaultAlert("相机", "无法打开摄像头", true);
+		}
+		case NO_STORAGE:
+		{
+			return sysFaultAlert("存储器", "SD卡不存在或未挂载", true);
+		}
+		case WIFI_LOST:
+		{
+			return sysFaultAlert("WIFI", "WIFI未连接", true);
+		}
+		case STORAGE_ERROR:
+		{
+			return sysFaultAlert("存储器", "SD卡文件系统出错或或未连接", true);
+		}
+		}
 
-        return null;
-    }
+		return null;
+	}
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState)
@@ -164,34 +175,33 @@ public class MainActivityIPC extends Activity
 		super.onCreate(savedInstanceState);
 		Log.i(LOG_TAG, "onCreate");
 
-		//requestWindowFeature(Window.FEATURE_NO_TITLE);
-		//super.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-		//		WindowManager.LayoutParams.FLAG_FULLSCREEN);// FLAG_FULLSCREEN
+		// requestWindowFeature(Window.FEATURE_NO_TITLE);
+		// super.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+		// WindowManager.LayoutParams.FLAG_FULLSCREEN);// FLAG_FULLSCREEN
 		super.getWindow().addFlags(
 				WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 		setContentView(R.layout.activity_main_activity_ipc);
 
-		tvFps = (TextView)findViewById(R.id.tvFps);
+		tvFps = (TextView) findViewById(R.id.tvFps);
 
-		NetIf wifi=getWifi();
-		if(wifi==null)
+		NetIf wifi = getWifi();
+		if (wifi == null)
 		{
 			showDialog(DLG.WIFI_LOST.ordinal());
 			return;
 		}
 
-		tvIp=(TextView)findViewById(R.id.tvIp);
-		tvIp.setText(wifi.ipStr+":"+HTTP_PORT+"   "+wifi.macStr);
+		tvIp = (TextView) findViewById(R.id.tvIp);
+		tvIp.setText(wifi.ipStr + ":" + HTTP_PORT + "   " + wifi.macStr);
 
-		tvLoginMsg=(TextView)findViewById(R.id.textViewMainLoginMsg);
-        
-		
+		tvLoginMsg = (TextView) findViewById(R.id.textViewMainLoginMsg);
+
 		camInit();
 
 		httpServerInit();
 
-		httpDdnsClient=new HttpDdnsClient();
-		//httpDdnsClient.start("gk969","sj299792458gk", mMsgHld);
+		httpDdnsClient = new HttpDdnsClient();
+		// httpDdnsClient.start("gk969","sj299792458gk", mMsgHld);
 	}
 
 	protected void onStart()
@@ -204,7 +214,7 @@ public class MainActivityIPC extends Activity
 	{
 		super.onResume();
 		Log.i(LOG_TAG, "onResume");
-		
+
 		httpDdnsClient.setMsgHandler(mMsgHld);
 	}
 
@@ -212,7 +222,7 @@ public class MainActivityIPC extends Activity
 	{
 		super.onPause();
 		Log.i(LOG_TAG, "onPause");
-		
+
 	}
 
 	protected void onStop()
@@ -220,114 +230,114 @@ public class MainActivityIPC extends Activity
 		super.onStop();
 		Log.i(LOG_TAG, "onStop");
 	}
-	
+
 	protected void onDestroy()
 	{
 		super.onDestroy();
 		Log.i(LOG_TAG, "onDestroy");
-		if(timCam!=null)
+		if (timCam != null)
 		{
 			timCam.cancel();
 		}
 
-		if(httpSvr!=null)
+		if (httpSvr != null)
 		{
 			httpSvr.close();
 		}
-		
-		if(httpDdnsClient!=null)
+
+		if (httpDdnsClient != null)
 		{
 			httpDdnsClient.stop();
 		}
 	}
-	
 
-    @Override
-	protected void onActivityResult(int requestCode, int resultCode,
-		Intent data) {
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data)
+	{
 
-        if (requestCode == GET_CODE) {
-            if (resultCode == RESULT_CANCELED) {
-                Log.i(LOG_TAG, "cancelled!");
-                tvLoginMsg.setText("");
-            } else {
-                if (data != null) {
-                	String retStr=data.getAction();
-                    Log.i(LOG_TAG, retStr);
-                	tvLoginMsg.setText(retStr);
-                }
-            }
-        }
-    }
+		if (requestCode == GET_CODE)
+		{
+			if (resultCode == RESULT_CANCELED)
+			{
+				Log.i(LOG_TAG, "cancelled!");
+				tvLoginMsg.setText("");
+			} else
+			{
+				if (data != null)
+				{
+					String retStr = data.getAction();
+					Log.i(LOG_TAG, retStr);
+					tvLoginMsg.setText(retStr);
+				}
+			}
+		}
+	}
 
-    static final private int GET_CODE = 0;
-	
 	private void httpServerInit()
 	{
-		File webDir=getWebDir();
-		if(webFileToSD())
+		File webDir = getWebDir();
+		if (webFileToSD())
 		{
 			try
 			{
-				httpSvr=new HttpServer(HTTP_PORT, webDir);
+				httpSvr = new HttpServer(HTTP_PORT, webDir);
 			} catch (IOException e)
 			{
 				e.printStackTrace();
 			}
 		}
 	}
-	
+
 	private class hldMsg extends Handler
 	{
 		@Override
 		public void handleMessage(Message msg)
 		{
-			switch(msg.what)
+			switch (msg.what)
 			{
-				case MSG_TIMER_FPS:
+			case MSG_TIMER_FPS:
+			{
+				tvFps.setText("FPS:" + fpsCalc.fps);
+				break;
+			}
+
+			case MSG_HTTP_LOGIN_SUCCESS:
+			{
+				String jsonStr = (String) (msg.obj);
+				Log.i(LOG_TAG, "httpRecv:" + jsonStr);
+
+				JSONObject object;
+				try
 				{
-					tvFps.setText("FPS:"+fpsCalc.fps);
-					break;
+					object = new JSONObject(jsonStr);
+					String ipcAddr = object.getString("ipc_addr");
+					tvLoginMsg.setText("登录成功！外网IP：" + ipcAddr + "已存入服务器。");
+
+				} catch (JSONException e)
+				{
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
 
-				case MSG_HTTP_LOGIN_SUCCESS:
-				{
-					String jsonStr=(String)(msg.obj);
-					Log.i(LOG_TAG, "httpRecv:"+jsonStr);
-					
-					JSONObject object;
-					try
-					{
-						object = new JSONObject(jsonStr);
-    					String ipcAddr = object.getString("ipc_addr");
-    					tvLoginMsg.setText("登录成功！外网IP："+ipcAddr+"已存入服务器。");
-    					
-					} catch (JSONException e)
-					{
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-					
-					
-					break;
-				}
-				
-				case MSG_HTTP_LOGIN_AUTH_FAIL:
-				{
-					Log.i(LOG_TAG, "Server Login Auth Fail!");
-					tvLoginMsg.setText("登录失败，用户名或密码错误！");
-					break;
-				}
+				break;
+			}
 
-				case MSG_HTTP_LOGIN_LINK_FAIL:
-				{
-					Log.i(LOG_TAG, "Server Login Link Fail!");
-					tvLoginMsg.setText("登录失败，无法连接服务器！");
-					break;
-				}
-				
-				default:
-					break;
+			case MSG_HTTP_LOGIN_AUTH_FAIL:
+			{
+				Log.i(LOG_TAG, "Server Login Auth Fail!");
+				tvLoginMsg.setText("登录失败，用户名或密码错误！");
+				break;
+			}
+
+			case MSG_HTTP_LOGIN_LINK_FAIL:
+			{
+				Log.i(LOG_TAG, "Server Login Link Fail!");
+				tvLoginMsg.setText("登录失败，无法连接服务器！");
+				break;
+			}
+
+			default:
+				break;
 			}
 			super.handleMessage(msg);
 		}
@@ -339,19 +349,21 @@ public class MainActivityIPC extends Activity
 		FrameLayout framePreview = (FrameLayout) findViewById(R.id.frameViewCam);
 
 		mCamView = new CamView(this, new CamPreviewCB());
-		if(mCamView.mCamera==null)
+		if (mCamView.mCamera == null)
 		{
 			showDialog(DLG.CAM_ERROR.ordinal());
-		}
-		else
+		} else
 		{
-			Display display =getWindowManager().getDefaultDisplay();
+			Display display = getWindowManager().getDefaultDisplay();
 
-			Log.i(LOG_TAG, "screen:"+display.getWidth()+" "+display.getHeight());
-			Log.i(LOG_TAG, "mCamView:"+mCamView.ipcSize.width+" "+mCamView.ipcSize.height);
+			Log.i(LOG_TAG,
+					"screen:" + display.getWidth() + " " + display.getHeight());
+			Log.i(LOG_TAG, "mCamView:" + mCamView.ipcSize.width + " "
+					+ mCamView.ipcSize.height);
 
-			mCamView.mHolder.setFixedSize(mCamView.ipcSize.width*display.getHeight()/
-										mCamView.ipcSize.height, display.getHeight());
+			mCamView.mHolder.setFixedSize(
+					mCamView.ipcSize.width * display.getHeight()
+							/ mCamView.ipcSize.height, display.getHeight());
 			framePreview.addView(mCamView);
 
 			fpsCalc = new cFpsCalc();
@@ -368,9 +380,7 @@ public class MainActivityIPC extends Activity
 					CMsg.what = MSG_TIMER_FPS;
 					mMsgHld.sendMessage(CMsg);
 				}
-			},FPS_INTVAL, FPS_INTVAL);
-
-
+			}, FPS_INTVAL, FPS_INTVAL);
 
 			mCamView.setOnClickListener(new View.OnClickListener()
 			{
@@ -385,14 +395,14 @@ public class MainActivityIPC extends Activity
 			{
 				public void onClick(View v)
 				{
-					if(getAppDir()!=null&&!isRecording)
+					if (getAppDir() != null && !isRecording)
 					{
 						mCamView.mCamera.autoFocus(new TakePicAfterFocus());
 					}
 				}
 			});
 
-			isRecording=false;
+			isRecording = false;
 			buttonRec = (Button) findViewById(R.id.buttonRec);
 			buttonRec.setOnClickListener(new View.OnClickListener()
 			{
@@ -403,15 +413,16 @@ public class MainActivityIPC extends Activity
 						mCamView.stopRec();
 						buttonRec.setText(R.string.record);
 						isRecording = false;
-					}
-					else
+					} else
 					{
 						File appDir;
-						appDir=getAppDir();
-						if(appDir!=null)
+						appDir = getAppDir();
+						if (appDir != null)
 						{
-							String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss").format(new Date());
-							File vidFile = new File(appDir, "VID_" + timeStamp + ".MP4");
+							String timeStamp = new SimpleDateFormat(
+									"yyyy_MMdd_HHmmss").format(new Date());
+							File vidFile = new File(appDir, "VID_" + timeStamp
+									+ ".MP4");
 							// initialize video camera
 							if (mCamView.startRec(vidFile))
 							{
@@ -423,17 +434,18 @@ public class MainActivityIPC extends Activity
 				}
 			});
 
-			btLogin=(Button) findViewById(R.id.buttonLogin);
+			btLogin = (Button) findViewById(R.id.buttonLogin);
 			btLogin.setOnClickListener(new View.OnClickListener()
 			{
 				public void onClick(View v)
 				{
-		            Intent intent = new Intent(MainActivityIPC.this, ActivityLogin.class);
-		            //startActivity(intent);//直接切换Activity不接收返回结果
-		            startActivityForResult(intent, GET_CODE);
+					Intent intent = new Intent(MainActivityIPC.this,
+							ActivityLogin.class);
+					// startActivity(intent);//直接切换Activity不接收返回结果
+					startActivityForResult(intent, GET_CODE);
 				}
 			});
-			
+
 		}
 
 	}
@@ -444,16 +456,16 @@ public class MainActivityIPC extends Activity
 		@Override
 		public void onPreviewFrame(byte[] data, Camera camera)
 		{
-			long curTimems=System.currentTimeMillis();
+			long curTimems = System.currentTimeMillis();
 			fpsCalc.frmCnt++;
-			if((curTimems-fpsCalc.timeMs)>FPS_INTVAL)
+			if ((curTimems - fpsCalc.timeMs) > FPS_INTVAL)
 			{
-				fpsCalc.fps=(int) (1000*fpsCalc.frmCnt/(curTimems-fpsCalc.timeMs));
-				fpsCalc.frmCnt=0;
-				fpsCalc.timeMs=curTimems;
+				fpsCalc.fps = (int) (1000 * fpsCalc.frmCnt / (curTimems - fpsCalc.timeMs));
+				fpsCalc.frmCnt = 0;
+				fpsCalc.timeMs = curTimems;
 			}
 
-			if(httpSvr!=null)
+			if (httpSvr != null)
 			{
 				httpSvr.synImg.setImgData(data, mCamView.ipcSize.width,
 						mCamView.ipcSize.height);
@@ -482,19 +494,19 @@ public class MainActivityIPC extends Activity
 		{
 			try
 			{
-				File appDir=getAppDir();
-				if(appDir!=null)
+				File appDir = getAppDir();
+				if (appDir != null)
 				{
-					String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss").format(new Date());
+					String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss")
+							.format(new Date());
 					File pic = new File(appDir, "PIC_" + timeStamp + ".jpg");
 					Log.i("onPictureTaken", pic.toString());
 					FileOutputStream fos = new FileOutputStream(pic);
 					fos.write(data);
 					fos.close();
-				}
-				else
+				} else
 				{
-					Log.w("onPictureTaken","File Fail");
+					Log.w("onPictureTaken", "File Fail");
 				}
 				camera.stopPreview();
 
@@ -510,29 +522,27 @@ public class MainActivityIPC extends Activity
 
 	public File getAppDir()
 	{
-		File dir=null;
+		File dir = null;
 
-		//外部存储器存在
-		if(Environment.getExternalStorageState()
-		.equals(android.os.Environment.MEDIA_MOUNTED))
+		// 外部存储器存在
+		if (Environment.getExternalStorageState().equals(
+				android.os.Environment.MEDIA_MOUNTED))
 		{
-			dir=new File(Environment.getExternalStorageDirectory() +
-								File.separator + getString(R.string.app_name));
-			if(!dir.exists())
+			dir = new File(Environment.getExternalStorageDirectory()
+					+ File.separator + getString(R.string.app_name));
+			if (!dir.exists())
 			{
-				Log.i("getAppDir", "Dir:"+dir.toString()+" Not Exist!");
+				Log.i("getAppDir", "Dir:" + dir.toString() + " Not Exist!");
 				dir.mkdir();
-				if(!dir.exists())
+				if (!dir.exists())
 				{
 					showDialog(DLG.STORAGE_ERROR.ordinal());
 				}
-			}
-			else
+			} else
 			{
-				Log.i("getAppDir", "Dir:"+dir.toString()+" Already Exist!");
+				Log.i("getAppDir", "Dir:" + dir.toString() + " Already Exist!");
 			}
-		}
-		else
+		} else
 		{
 			showDialog(DLG.NO_STORAGE.ordinal());
 		}
@@ -542,13 +552,13 @@ public class MainActivityIPC extends Activity
 
 	public File getWebDir()
 	{
-		File dir=null;
+		File dir = null;
 
-		File appDir=getAppDir();
-		if(appDir!=null)
+		File appDir = getAppDir();
+		if (appDir != null)
 		{
-			dir=new File(appDir, "WebFile");
-			if(!dir.exists())
+			dir = new File(appDir, "WebFile");
+			if (!dir.exists())
 			{
 				dir.mkdir();
 			}
@@ -558,41 +568,41 @@ public class MainActivityIPC extends Activity
 
 	public boolean webFileToSD()
 	{
-		File webFile=null;
-		File webDir=getWebDir();
+		File webFile = null;
+		File webDir = getWebDir();
 
-		if(webDir==null)
+		if (webDir == null)
 		{
 			return false;
 		}
 
-		int[] webFileRawId={R.raw.index, R.raw.proc};
-		String[] webFileName={"index.html", "proc.js"};
-		final int webFileNum=webFileRawId.length;
-		if(webFileNum!=webFileName.length)
+		int[] webFileRawId = { R.raw.index, R.raw.proc };
+		String[] webFileName = { "index.html", "proc.js" };
+		final int webFileNum = webFileRawId.length;
+		if (webFileNum != webFileName.length)
 		{
 			return false;
 		}
 
-		for(int i=0; i<webFileNum; i++)
+		for (int i = 0; i < webFileNum; i++)
 		{
-			webFile=new File(webDir, webFileName[i]);
+			webFile = new File(webDir, webFileName[i]);
 			Log.i(LOG_TAG, webFile.toString());
 			try
 			{
-				InputStream rawIn = getResources().openRawResource(webFileRawId[i]);
+				InputStream rawIn = getResources().openRawResource(
+						webFileRawId[i]);
 				FileOutputStream fos = new FileOutputStream(webFile);
 
-		        int     length;
-		        byte[] buffer = new byte[1024*32];
-		        while((length = rawIn.read(buffer)) != -1)
-		        {
-		            fos.write(buffer,0,length);
-		        }
-		        rawIn.close();
-		        fos.close();
-			}
-			catch(IOException ioe)
+				int length;
+				byte[] buffer = new byte[1024 * 32];
+				while ((length = rawIn.read(buffer)) != -1)
+				{
+					fos.write(buffer, 0, length);
+				}
+				rawIn.close();
+				fos.close();
+			} catch (IOException ioe)
 			{
 				Log.e(LOG_TAG, ioe.toString());
 				return false;
@@ -603,26 +613,28 @@ public class MainActivityIPC extends Activity
 
 	public String getLocalIp()
 	{
-	    try
-	    {
-	        for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces();
-	        		en.hasMoreElements();)
-	        {
-	            NetworkInterface intf = en.nextElement();
-	            for (Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses();
-	            		enumIpAddr.hasMoreElements();)
-	            {
-	                InetAddress inetAddress = enumIpAddr.nextElement();
-	                if (!inetAddress.isLoopbackAddress() && !inetAddress.isLinkLocalAddress())
-	                {
-	                    return inetAddress.getHostAddress().toString();
-	                }
-	            }
-	        }
-	    } catch (SocketException ex) {
-	        Log.e(LOG_TAG, ex.toString());
-	    }
-	    return null;
+		try
+		{
+			for (Enumeration<NetworkInterface> en = NetworkInterface
+					.getNetworkInterfaces(); en.hasMoreElements();)
+			{
+				NetworkInterface intf = en.nextElement();
+				for (Enumeration<InetAddress> enumIpAddr = intf
+						.getInetAddresses(); enumIpAddr.hasMoreElements();)
+				{
+					InetAddress inetAddress = enumIpAddr.nextElement();
+					if (!inetAddress.isLoopbackAddress()
+							&& !inetAddress.isLinkLocalAddress())
+					{
+						return inetAddress.getHostAddress().toString();
+					}
+				}
+			}
+		} catch (SocketException ex)
+		{
+			Log.e(LOG_TAG, ex.toString());
+		}
+		return null;
 	}
 
 	public class NetIf
@@ -631,58 +643,56 @@ public class MainActivityIPC extends Activity
 		int ipInt;
 		String macStr;
 
-	    public String ip_ntoa(int ipInt)
-	    {
-	    	if(ipInt!=0)
-	    	{
-	    		return new StringBuilder().append((ipInt & 0xff)).append('.')
-	                .append((ipInt >> 8) & 0xff).append('.').append(
-	                        (ipInt >> 16) & 0xff).append('.').append((ipInt >> 24) & 0xff)
-	                .toString();
-	    	}
-	    	return null;
-	    }
+		public String ip_ntoa(int ipInt)
+		{
+			if (ipInt != 0)
+			{
+				return new StringBuilder().append((ipInt & 0xff)).append('.')
+						.append((ipInt >> 8) & 0xff).append('.')
+						.append((ipInt >> 16) & 0xff).append('.')
+						.append((ipInt >> 24) & 0xff).toString();
+			}
+			return null;
+		}
 
-	    public boolean setIp(int ip)
-	    {
-	    	if(ip==0)
-	    	{
-	    		return false;
-	    	}
+		public boolean setIp(int ip)
+		{
+			if (ip == 0)
+			{
+				return false;
+			}
 
-	    	ipInt=ip;
-	    	ipStr=ip_ntoa(ip);
-	    	return true;
-	    }
+			ipInt = ip;
+			ipStr = ip_ntoa(ip);
+			return true;
+		}
 	}
 
-    public NetIf getWifi()
-    {
-    	NetIf wifi=new NetIf();
-    	try
-    	{
-	        WifiManager mWifi = (WifiManager) getSystemService(Context.WIFI_SERVICE);
-	        WifiInfo info = mWifi.getConnectionInfo();
-	        int ip=info.getIpAddress();
-	        if(ip==0)
-	        {
-	        	return null;
-	        }
+	public NetIf getWifi()
+	{
+		NetIf wifi = new NetIf();
+		try
+		{
+			WifiManager mWifi = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+			WifiInfo info = mWifi.getConnectionInfo();
+			int ip = info.getIpAddress();
+			if (ip == 0)
+			{
+				return null;
+			}
 
-	        wifi.setIp(ip);
-	        Log.i(LOG_TAG, wifi.ipStr);
-	        wifi.macStr=info.getMacAddress().toUpperCase();
-	        return wifi;
-    	}
-    	catch(Exception ex)
-    	{
-    		Log.e(LOG_TAG, ex.toString());
-    	}
-    	return null;
-    }
+			wifi.setIp(ip);
+			Log.i(LOG_TAG, wifi.ipStr);
+			wifi.macStr = info.getMacAddress().toUpperCase();
+			return wifi;
+		} catch (Exception ex)
+		{
+			Log.e(LOG_TAG, ex.toString());
+		}
+		return null;
+	}
 
 }
-
 
 // ----------------------------------------------------------------------
 
@@ -696,80 +706,88 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	Camera mCamera;
 	Camera.Size picSize;
 	Camera.Size prevSize;
-	final static int IPC_WIDTH=640;
+	final static int IPC_WIDTH = 640;
 	Camera.Size ipcSize;
 
-	private static final String LOG_TAG="CamView";
+	private static final String LOG_TAG = "CamView";
 
 	CamView(Context context, CamPreviewCB camPreviewCB)
 	{
 		super(context);
 
-		previewCallBack=camPreviewCB;
+		previewCallBack = camPreviewCB;
 		openCamera();
 	}
 
 	private void openCamera()
 	{
 		mCamera = Camera.open(0);
-		if(mCamera!=null)
+		if (mCamera != null)
 		{
 			Camera.Parameters parameters = mCamera.getParameters();
 
-			//查找最大预览尺寸
-			List<Camera.Size> PreviewSizes=parameters.getSupportedPreviewSizes();
-			prevSize=PreviewSizes.get(0);
-			for(int i=0; i<PreviewSizes.size(); i++)
+			// 查找最大预览尺寸
+			List<Camera.Size> PreviewSizes = parameters
+					.getSupportedPreviewSizes();
+			prevSize = PreviewSizes.get(0);
+			for (int i = 0; i < PreviewSizes.size(); i++)
 			{
-				if(prevSize.width<PreviewSizes.get(i).width)
+				if (prevSize.width < PreviewSizes.get(i).width)
 				{
-					prevSize.width=PreviewSizes.get(i).width;
-					prevSize.height=PreviewSizes.get(i).height;
+					prevSize.width = PreviewSizes.get(i).width;
+					prevSize.height = PreviewSizes.get(i).height;
 				}
 
-				Log.i("PreviewSizes", "width:"+PreviewSizes.get(i).width+" height:"+PreviewSizes.get(i).height);
+				Log.i("PreviewSizes", "width:" + PreviewSizes.get(i).width
+						+ " height:" + PreviewSizes.get(i).height);
 			}
-			//Log.i("PreviewSizes", "width:"+prevSize.width+" height:"+prevSize.height);
+			// Log.i("PreviewSizes",
+			// "width:"+prevSize.width+" height:"+prevSize.height);
 
-			//查找与最大预览尺寸最接近的照片尺寸
-			List<Camera.Size> PictureSizes=parameters.getSupportedPictureSizes();
-			picSize=PictureSizes.get(0);
-			int widDiff=Math.abs(picSize.width-prevSize.width);
-			for(int i=0; i<PictureSizes.size(); i++)
+			// 查找与最大预览尺寸最接近的照片尺寸
+			List<Camera.Size> PictureSizes = parameters
+					.getSupportedPictureSizes();
+			picSize = PictureSizes.get(0);
+			int widDiff = Math.abs(picSize.width - prevSize.width);
+			for (int i = 0; i < PictureSizes.size(); i++)
 			{
-				int curDiff=Math.abs(PictureSizes.get(i).width-prevSize.width);
-				if(widDiff>curDiff)
+				int curDiff = Math.abs(PictureSizes.get(i).width
+						- prevSize.width);
+				if (widDiff > curDiff)
 				{
-					picSize.width=PictureSizes.get(i).width;
-					picSize.height=PictureSizes.get(i).height;
-					widDiff=curDiff;
+					picSize.width = PictureSizes.get(i).width;
+					picSize.height = PictureSizes.get(i).height;
+					widDiff = curDiff;
 				}
 
-				Log.i("PictureSizes", "width:"+PictureSizes.get(i).width+" height:"+PictureSizes.get(i).height);
+				Log.i("PictureSizes", "width:" + PictureSizes.get(i).width
+						+ " height:" + PictureSizes.get(i).height);
 			}
-			Log.i("PictureSizes Used", "width:"+picSize.width+" height:"+picSize.height);
+			Log.i("PictureSizes Used", "width:" + picSize.width + " height:"
+					+ picSize.height);
 
-			//查找与宽度IPC_WIDTH相近的预览尺寸，作为IPC传输的默认尺寸。
-			ipcSize=PreviewSizes.get(0);
-			widDiff=Math.abs(picSize.width-IPC_WIDTH);
-			for(int i=0; i<PreviewSizes.size(); i++)
+			// 查找与宽度IPC_WIDTH相近的预览尺寸，作为IPC传输的默认尺寸。
+			ipcSize = PreviewSizes.get(0);
+			widDiff = Math.abs(picSize.width - IPC_WIDTH);
+			for (int i = 0; i < PreviewSizes.size(); i++)
 			{
-				int curDiff=Math.abs(PreviewSizes.get(i).width-IPC_WIDTH);
-				if(widDiff>curDiff)
+				int curDiff = Math.abs(PreviewSizes.get(i).width - IPC_WIDTH);
+				if (widDiff > curDiff)
 				{
-					ipcSize.width=PreviewSizes.get(i).width;
-					ipcSize.height=PreviewSizes.get(i).height;
-					widDiff=curDiff;
+					ipcSize.width = PreviewSizes.get(i).width;
+					ipcSize.height = PreviewSizes.get(i).height;
+					widDiff = curDiff;
 				}
 			}
-			Log.i("IPC sizes Used", "width:"+ipcSize.width+" height:"+ipcSize.height);
-
+			Log.i("IPC sizes Used", "width:" + ipcSize.width + " height:"
+					+ ipcSize.height);
 
 			parameters.setPictureFormat(PixelFormat.JPEG);
-			parameters.setPictureSize(picSize.width, picSize.height);//(picSize.width, picSize.height);
+			parameters.setPictureSize(picSize.width, picSize.height);// (picSize.width,
+																		// picSize.height);
 			parameters.setPreviewSize(ipcSize.width, ipcSize.height);
 			parameters.setJpegQuality(100);
-			//parameters.get
+			// parameters.get
 			mCamera.setParameters(parameters);
 
 			// Install a SurfaceHolder.Callback so we get notified when the
@@ -780,7 +798,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 		}
 	}
-	
+
 	private void releaseMediaRecorder()
 	{
 		if (mMediaRec != null)
@@ -797,7 +815,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 	public boolean prepareRec(File vidFile)
 	{
-		if(vidFile==null)
+		if (vidFile == null)
 		{
 			return false;
 		}
@@ -822,16 +840,14 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		try
 		{
 			mMediaRec.prepare();
-		}
-		catch(IllegalStateException e)
+		} catch (IllegalStateException e)
 		{
 			Log.d("prepareRec",
-				  "IllegalStateException preparing MediaRecorder: "
+					"IllegalStateException preparing MediaRecorder: "
 							+ e.getMessage());
 			releaseMediaRecorder();
 			return false;
-		}
-		catch(IOException e)
+		} catch (IOException e)
 		{
 			Log.d("prepareRec",
 					"IOException preparing MediaRecorder: " + e.getMessage());
@@ -845,12 +861,12 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	public boolean startRec(File vidFile)
 	{
 		// initialize video camera
-		Log.i("startRec","startRec");
+		Log.i("startRec", "startRec");
 		if (prepareRec(vidFile))
 		{
 			mMediaRec.start();
 			return true;
-		}else
+		} else
 		{
 			// prepare didn't work, release the camera
 			releaseMediaRecorder();
@@ -860,7 +876,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 	public void stopRec()
 	{
-		if(mMediaRec!=null)
+		if (mMediaRec != null)
 		{
 			// stop recording and release camera
 			mMediaRec.stop(); // stop the recording
@@ -871,13 +887,13 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	public void surfaceCreated(SurfaceHolder holder)
 	{
 		Log.i(LOG_TAG, "surfaceCreated");
-		if(mCamera==null)
+		if (mCamera == null)
 		{
 			openCamera();
 		}
 		// The Surface has been created, acquire the camera and tell it where
 		// to draw.
-		if(mCamera != null)
+		if (mCamera != null)
 		{
 			try
 			{
@@ -894,7 +910,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	public void surfaceDestroyed(SurfaceHolder holder)
 	{
 		Log.i(LOG_TAG, "surfaceDestroyed");
-		
+
 		stopRec();
 
 		// Surface will be destroyed when we return, so stop the preview.
@@ -915,7 +931,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		// the preview.
 		Log.i(LOG_TAG, "surfaceChanged");
 
-		if(mCamera!=null)
+		if (mCamera != null)
 		{
 			mCamera.setPreviewCallback(previewCallBack);
 			/*

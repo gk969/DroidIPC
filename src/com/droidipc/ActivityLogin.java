@@ -5,7 +5,12 @@ import org.json.JSONObject;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteException;
+import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -22,6 +27,9 @@ public class ActivityLogin extends Activity
 	private TextView textViewPassword;
 	private TextView tvLoginMsg;
 	
+	private String user;
+	private String password;
+	
 	private Handler hldLoginMsg;
 	
     @Override
@@ -37,6 +45,7 @@ public class ActivityLogin extends Activity
 		textViewUser=(TextView)findViewById(R.id.editTextUser);
 		textViewPassword=(TextView)findViewById(R.id.editTextPassword);
 		
+		loadUser();
 		
         hldLoginMsg=new Handler(){
     		@Override
@@ -52,6 +61,8 @@ public class ActivityLogin extends Activity
     					JSONObject object;
     					try
 						{
+    						saveUser(user, password);
+    						
 							object = new JSONObject(jsonStr);
 	    					String ipcAddr = object.getString("ipc_addr");
 	    					setResult(RESULT_OK, (new Intent()).setAction(
@@ -95,11 +106,117 @@ public class ActivityLogin extends Activity
 			public void onClick(View v)
 			{
 				tvLoginMsg.setText("正在连接到gk969.com,请稍候…");
-				MainActivityIPC.httpDdnsClient.setAuth(textViewUser.getText().toString(), 
-						textViewPassword.getText().toString());
+				
+				user=textViewUser.getText().toString();
+				password=textViewPassword.getText().toString();
+				MainActivityIPC.httpDdnsClient.setAuth(user, password);
 				MainActivityIPC.httpDdnsClient.setMsgHandler(hldLoginMsg);
 				MainActivityIPC.httpDdnsClient.start();
 			}
 		});
     }
+    
+
+	private class DatabaseHelper extends SQLiteOpenHelper
+	{
+		DatabaseHelper(Context context)
+		{
+			super(context, "auth.db", null, 1);
+		}
+
+		@Override
+		public void onCreate(SQLiteDatabase db)
+		{
+			// TODO 创建数据库后，对数据库的操作
+			db.execSQL("CREATE TABLE user "
+					+ "(name varchar(20) not null , password varchar(60) not null );"); 
+		}
+
+		@Override
+		public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion)
+		{
+			// TODO 更改数据库版本的操作
+		}
+
+		@Override
+		public void onOpen(SQLiteDatabase db)
+		{
+			super.onOpen(db);
+			// TODO 每次成功打开数据库后首先被执行
+		}
+	}
+
+	private void saveUser(String name, String passWord)
+	{
+		SQLiteDatabase db = null;
+		try
+		{
+			try
+			{
+				db=(new DatabaseHelper(getBaseContext())).getWritableDatabase();
+				
+				//多用户
+				/*
+				Cursor cursor = db.rawQuery("select * from user where name=?",new String[]{name});
+				if(cursor.moveToFirst())
+				{
+				    String oldPwd = cursor.getString(cursor.getColumnIndex("password"));
+				    Log.i(LOG_TAG, name+" Exist password:"+oldPwd);
+				    if(passWord!=oldPwd)
+				    {
+					    db.execSQL("update [user] set password = '"+passWord+"' where name='"+name+"'");
+					    Log.i(LOG_TAG, name+" New password:"+passWord);
+				    }
+				}
+				else
+				{
+					db.execSQL("insert into user(name,password) values ('"+name+"','"+passWord+"');");
+				    Log.i(LOG_TAG, "New Usre "+name+":"+passWord);
+				}
+				*/
+				
+				//单用户
+				db.execSQL("delete from user");
+				db.execSQL("insert into user(name,password) values ('"+name+"','"+passWord+"');");
+			    Log.i(LOG_TAG, "User "+name+":"+passWord);
+			}
+			finally
+			{
+				if(db!=null)db.close();
+			}
+		}
+		catch(SQLiteException e)
+		{
+			Log.i(LOG_TAG, e.toString());
+		}
+	}
+	
+    private void loadUser()
+    {
+    	SQLiteDatabase db = null;
+		try
+		{
+			try
+			{
+				db=(new DatabaseHelper(getBaseContext())).getWritableDatabase();
+				
+				Cursor cursor = db.rawQuery("select * from user", null);
+				if(cursor.moveToFirst())
+				{
+					textViewUser.setText(cursor.getString(cursor.getColumnIndex("name")));
+					textViewPassword.setText(cursor.getString(cursor.getColumnIndex("password")));
+				}
+				
+			}
+			finally
+			{
+				if(db!=null)db.close();
+			}
+		}
+		catch(SQLiteException e)
+		{
+			Log.i(LOG_TAG, e.toString());
+		}
+    }
+    
 }
