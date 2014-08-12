@@ -77,7 +77,7 @@ public class HttpServer extends NanoHTTPD
 	
 	private ByteArrayOutputStream NV21toJpgStream(Cimg img)
 	{
-		if(img.data==null)
+		if(img==null)
 			return null;
 		
 		ByteArrayOutputStream imgStream=new ByteArrayOutputStream();
@@ -121,8 +121,12 @@ public class HttpServer extends NanoHTTPD
 				tim=System.currentTimeMillis()-tim;
 				Log.i(LOG_TAG, "NV21toJpgStream "+tim+"ms");
 	        	
-	        	String mime = "image/jpeg";
-				Response res = new Response( HTTP_OK, mime, 
+				if(imgStream==null)
+				{
+					return null;
+				}
+				
+				Response res = new Response( HTTP_OK, "image/jpeg", 
 						new ByteArrayInputStream(imgStream.toByteArray()));
 				res.addHeader( "Content-Length", "" + imgStream.size());
 				res.addHeader( "Accept-Ranges", "bytes");
