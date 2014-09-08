@@ -9,5 +9,6 @@
     <string name="startLogin">登录到 gk969.com</string>
     <string name="user">用户名</string>
     <string name="password">密码</string>
+    <string name="switchCam">切换镜头</string>
 
 </resources>

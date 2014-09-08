@@ -37,14 +37,6 @@
         android:layout_alignParentBottom="true"
         android:layout_alignParentRight="true"
         android:text="@string/take_picture" />
-    
-    <Button
-        android:id="@+id/buttonRec"
-        android:layout_width="75dp"
-        android:layout_height="50dp"
-        android:layout_alignParentTop="true"
-        android:layout_alignParentRight="true"
-        android:text="@string/record" />
 
     <Button
         android:id="@+id/buttonLogin"
@@ -63,5 +55,20 @@
         android:layout_alignParentLeft="true"
         android:textColor="#F00"
         android:textAppearance="?android:attr/textAppearanceMedium" />
+
+    <Button
+        android:id="@+id/buttonRec"
+        android:layout_width="75dp"
+        android:layout_height="50dp"
+        android:layout_above="@+id/buttonTakePic"
+        android:layout_alignParentRight="true"
+        android:text="@string/record" />
+
+    <Button
+        android:id="@+id/buttonSwitchCam"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentRight="true"
+        android:text="@string/switchCam" />
 
 </RelativeLayout>

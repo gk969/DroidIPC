@@ -96,6 +96,9 @@ public class MainActivityIPC extends Activity
 	private Button buttonTakePic;
 	private Button buttonRec;
 	private Button btLogin;
+	private Button btSwitchCam;
+	
+	
 	private TextView tvFps;
 	private TextView tvIp;
 
@@ -175,9 +178,6 @@ public class MainActivityIPC extends Activity
 		super.onCreate(savedInstanceState);
 		Log.i(LOG_TAG, "onCreate");
 
-		// requestWindowFeature(Window.FEATURE_NO_TITLE);
-		// super.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-		// WindowManager.LayoutParams.FLAG_FULLSCREEN);// FLAG_FULLSCREEN
 		super.getWindow().addFlags(
 				WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 		setContentView(R.layout.activity_main_activity_ipc);
@@ -196,12 +196,15 @@ public class MainActivityIPC extends Activity
 
 		tvLoginMsg = (TextView) findViewById(R.id.textViewMainLoginMsg);
 
-		camInit();
+		if(camInit())
+		{
+			viewListenerInit();
+			
+			httpServerInit();
+	
+			httpDdnsClient = new HttpDdnsClient();
+		}
 
-		httpServerInit();
-
-		httpDdnsClient = new HttpDdnsClient();
-		// httpDdnsClient.start("gk969","sj299792458gk", mMsgHld);
 	}
 
 	protected void onStart()
@@ -344,110 +347,117 @@ public class MainActivityIPC extends Activity
 
 	}
 
-	private void camInit()
+	private boolean camInit()
 	{
 		FrameLayout framePreview = (FrameLayout) findViewById(R.id.frameViewCam);
 
-		mCamView = new CamView(this, new CamPreviewCB());
+		mCamView = new CamView(this, new CamPreviewCB(), 
+				getWindowManager().getDefaultDisplay());
 		if (mCamView.mCamera == null)
 		{
 			showDialog(DLG.CAM_ERROR.ordinal());
-		} else
+			return false;
+		}
+	
+		framePreview.addView(mCamView);
+
+		fpsCalc = new cFpsCalc();
+
+		mMsgHld = new hldMsg();
+
+		timCam = new Timer(true);
+		timCam.schedule(new TimerTask()
 		{
-			Display display = getWindowManager().getDefaultDisplay();
-
-			Log.i(LOG_TAG,
-					"screen:" + display.getWidth() + " " + display.getHeight());
-			Log.i(LOG_TAG, "mCamView:" + mCamView.ipcSize.width + " "
-					+ mCamView.ipcSize.height);
-
-			mCamView.mHolder.setFixedSize(
-					mCamView.ipcSize.width * display.getHeight()
-							/ mCamView.ipcSize.height, display.getHeight());
-			framePreview.addView(mCamView);
-
-			fpsCalc = new cFpsCalc();
-
-			mMsgHld = new hldMsg();
-
-			timCam = new Timer(true);
-			timCam.schedule(new TimerTask()
+			@Override
+			public void run()
 			{
-				@Override
-				public void run()
+				Message CMsg = new Message();
+				CMsg.what = MSG_TIMER_FPS;
+				mMsgHld.sendMessage(CMsg);
+			}
+		}, FPS_INTVAL, FPS_INTVAL);
+
+		return true;
+	}
+	
+	private void viewListenerInit()
+	{
+
+		mCamView.setOnClickListener(new View.OnClickListener()
+		{
+			public void onClick(View v)
+			{
+				mCamView.mCamera.autoFocus(null);
+			}
+		});
+
+		buttonTakePic = (Button) findViewById(R.id.buttonTakePic);
+		buttonTakePic.setOnClickListener(new View.OnClickListener()
+		{
+			public void onClick(View v)
+			{
+				if (getAppDir() != null && !isRecording)
 				{
-					Message CMsg = new Message();
-					CMsg.what = MSG_TIMER_FPS;
-					mMsgHld.sendMessage(CMsg);
+					mCamView.mCamera.autoFocus(new TakePicAfterFocus());
 				}
-			}, FPS_INTVAL, FPS_INTVAL);
+			}
+		});
 
-			mCamView.setOnClickListener(new View.OnClickListener()
+		isRecording = false;
+		buttonRec = (Button) findViewById(R.id.buttonRec);
+		buttonRec.setOnClickListener(new View.OnClickListener()
+		{
+			public void onClick(View v)
 			{
-				public void onClick(View v)
+				if (isRecording)
 				{
-					mCamView.mCamera.autoFocus(null);
-				}
-			});
-
-			buttonTakePic = (Button) findViewById(R.id.buttonTakePic);
-			buttonTakePic.setOnClickListener(new View.OnClickListener()
-			{
-				public void onClick(View v)
+					mCamView.stopRec();
+					buttonRec.setText(R.string.record);
+					isRecording = false;
+				} else
 				{
-					if (getAppDir() != null && !isRecording)
+					File appDir;
+					appDir = getAppDir();
+					if (appDir != null)
 					{
-						mCamView.mCamera.autoFocus(new TakePicAfterFocus());
-					}
-				}
-			});
-
-			isRecording = false;
-			buttonRec = (Button) findViewById(R.id.buttonRec);
-			buttonRec.setOnClickListener(new View.OnClickListener()
-			{
-				public void onClick(View v)
-				{
-					if (isRecording)
-					{
-						mCamView.stopRec();
-						buttonRec.setText(R.string.record);
-						isRecording = false;
-					} else
-					{
-						File appDir;
-						appDir = getAppDir();
-						if (appDir != null)
+						String timeStamp = new SimpleDateFormat(
+								"yyyy_MMdd_HHmmss").format(new Date());
+						File vidFile = new File(appDir, "VID_" + timeStamp
+								+ ".MP4");
+						// initialize video camera
+						if (mCamView.startRec(vidFile))
 						{
-							String timeStamp = new SimpleDateFormat(
-									"yyyy_MMdd_HHmmss").format(new Date());
-							File vidFile = new File(appDir, "VID_" + timeStamp
-									+ ".MP4");
-							// initialize video camera
-							if (mCamView.startRec(vidFile))
-							{
-								buttonRec.setText(R.string.stop);
-								isRecording = true;
-							}
+							buttonRec.setText(R.string.stop);
+							isRecording = true;
 						}
 					}
 				}
-			});
+			}
+		});
 
-			btLogin = (Button) findViewById(R.id.buttonLogin);
-			btLogin.setOnClickListener(new View.OnClickListener()
+		btLogin = (Button) findViewById(R.id.buttonLogin);
+		btLogin.setOnClickListener(new View.OnClickListener()
+		{
+			public void onClick(View v)
 			{
-				public void onClick(View v)
-				{
-					Intent intent = new Intent(MainActivityIPC.this,
-							ActivityLogin.class);
-					// startActivity(intent);//直接切换Activity不接收返回结果
-					startActivityForResult(intent, GET_CODE);
-				}
-			});
+				Intent intent = new Intent(MainActivityIPC.this,
+						ActivityLogin.class);
+				// startActivity(intent);//直接切换Activity不接收返回结果
+				startActivityForResult(intent, GET_CODE);
+			}
+		});
 
-		}
-
+		btSwitchCam=(Button)findViewById(R.id.buttonSwitchCam);
+		btSwitchCam.setOnClickListener(new View.OnClickListener()
+		{
+			
+			@Override
+			public void onClick(View v)
+			{
+				// TODO Auto-generated method stub
+				mCamView.switchCam();
+			}
+		});
 	}
 
 	public class CamPreviewCB implements Camera.PreviewCallback
@@ -702,102 +712,169 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	MediaRecorder mMediaRec;
 
 	CamPreviewCB previewCallBack;
+	
+	Display Container;
 
 	Camera mCamera;
 	Camera.Size picSize;
 	Camera.Size prevSize;
 	final static int IPC_WIDTH = 640;
 	Camera.Size ipcSize;
+	
+	private int camIndex;
 
 	private static final String LOG_TAG = "CamView";
 
-	CamView(Context context, CamPreviewCB camPreviewCB)
+	CamView(Context context, CamPreviewCB camPreviewCB, Display camContainer)
 	{
 		super(context);
-
+		
+		camIndex=0;
+		
+		Container=camContainer;
+		
 		previewCallBack = camPreviewCB;
-		openCamera();
+		
+		// Install a SurfaceHolder.Callback so we get notified when the
+		// underlying surface is created and destroyed.
+		mHolder = this.getHolder();
+		mHolder.addCallback(this);
+		mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+		
+		openCamera(camIndex);
+	}
+	
+	public void switchCam()
+	{
+		closeCamera();
+		if(camIndex==0)
+		{
+			camIndex=1;
+		}
+		else
+		{
+			camIndex=0;
+		}
+		
+		if(!openCamera(camIndex))
+		{
+			camIndex=0;
+			openCamera(camIndex);
+		}
+
+		try
+		{
+			mCamera.setPreviewDisplay(mHolder);
+		} catch (IOException e)
+		{
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		mCamera.setPreviewCallback(previewCallBack);
+		mCamera.startPreview();
 	}
 
-	private void openCamera()
+	private boolean openCamera(int cam)
 	{
-		mCamera = Camera.open(0);
+		mCamera = Camera.open(cam);
+		if (mCamera == null)
+		{
+			return false;
+		}
+		
+		Camera.Parameters parameters = mCamera.getParameters();
+		
+		Log.i(LOG_TAG,"HorizontalViewAngle:"+parameters.getHorizontalViewAngle());
+		Log.i(LOG_TAG,"VerticalViewAngle:"+parameters.getVerticalViewAngle());
+
+		// 查找最大预览尺寸
+		List<Camera.Size> PreviewSizes = parameters
+				.getSupportedPreviewSizes();
+		prevSize = PreviewSizes.get(0);
+		for (int i = 0; i < PreviewSizes.size(); i++)
+		{
+			if (prevSize.width < PreviewSizes.get(i).width)
+			{
+				prevSize.width = PreviewSizes.get(i).width;
+				prevSize.height = PreviewSizes.get(i).height;
+			}
+
+			Log.i(LOG_TAG, "PreviewSizes width:" + PreviewSizes.get(i).width
+					+ " height:" + PreviewSizes.get(i).height);
+		}
+		// Log.i("PreviewSizes",
+		// "width:"+prevSize.width+" height:"+prevSize.height);
+
+		// 查找与最大预览尺寸最接近的照片尺寸
+		List<Camera.Size> PictureSizes = parameters
+				.getSupportedPictureSizes();
+		picSize = PictureSizes.get(0);
+		int widDiff = Math.abs(picSize.width - prevSize.width);
+		for (int i = 0; i < PictureSizes.size(); i++)
+		{
+			int curDiff = Math.abs(PictureSizes.get(i).width
+					- prevSize.width);
+			if (widDiff > curDiff)
+			{
+				picSize.width = PictureSizes.get(i).width;
+				picSize.height = PictureSizes.get(i).height;
+				widDiff = curDiff;
+			}
+
+			Log.i(LOG_TAG, "PictureSizes width:" + PictureSizes.get(i).width
+					+ " height:" + PictureSizes.get(i).height);
+		}
+		Log.i(LOG_TAG, "PictureSizes Used width:" + picSize.width + " height:"
+				+ picSize.height);
+
+		// 查找与宽度IPC_WIDTH相近的预览尺寸，作为IPC传输的默认尺寸。
+		ipcSize = PreviewSizes.get(0);
+		widDiff = Math.abs(picSize.width - IPC_WIDTH);
+		for (int i = 0; i < PreviewSizes.size(); i++)
+		{
+			int curDiff = Math.abs(PreviewSizes.get(i).width - IPC_WIDTH);
+			if (widDiff > curDiff)
+			{
+				ipcSize.width = PreviewSizes.get(i).width;
+				ipcSize.height = PreviewSizes.get(i).height;
+				widDiff = curDiff;
+			}
+		}
+		Log.i(LOG_TAG, "IPC sizes Used width:" + ipcSize.width + " height:"
+				+ ipcSize.height);
+
+		parameters.setPictureFormat(PixelFormat.JPEG);
+		parameters.setPictureSize(picSize.width, picSize.height);// (picSize.width,
+																	// picSize.height);
+		parameters.setPreviewSize(ipcSize.width, ipcSize.height);
+		parameters.setJpegQuality(100);
+		// parameters.get
+		mCamera.setParameters(parameters);
+
+		Log.i(LOG_TAG,
+				"screen:" + Container.getWidth() + " " + Container.getHeight());
+		Log.i(LOG_TAG, "mCamView:" + ipcSize.width + " "
+				+ ipcSize.height);
+
+		mHolder.setFixedSize(ipcSize.width * Container.getHeight()/
+							 ipcSize.height, Container.getHeight());
+		
+		return true;
+	}
+	
+	private void closeCamera()
+	{
+		stopRec();
+
 		if (mCamera != null)
 		{
-			Camera.Parameters parameters = mCamera.getParameters();
-
-			// 查找最大预览尺寸
-			List<Camera.Size> PreviewSizes = parameters
-					.getSupportedPreviewSizes();
-			prevSize = PreviewSizes.get(0);
-			for (int i = 0; i < PreviewSizes.size(); i++)
-			{
-				if (prevSize.width < PreviewSizes.get(i).width)
-				{
-					prevSize.width = PreviewSizes.get(i).width;
-					prevSize.height = PreviewSizes.get(i).height;
-				}
-
-				Log.i("PreviewSizes", "width:" + PreviewSizes.get(i).width
-						+ " height:" + PreviewSizes.get(i).height);
-			}
-			// Log.i("PreviewSizes",
-			// "width:"+prevSize.width+" height:"+prevSize.height);
-
-			// 查找与最大预览尺寸最接近的照片尺寸
-			List<Camera.Size> PictureSizes = parameters
-					.getSupportedPictureSizes();
-			picSize = PictureSizes.get(0);
-			int widDiff = Math.abs(picSize.width - prevSize.width);
-			for (int i = 0; i < PictureSizes.size(); i++)
-			{
-				int curDiff = Math.abs(PictureSizes.get(i).width
-						- prevSize.width);
-				if (widDiff > curDiff)
-				{
-					picSize.width = PictureSizes.get(i).width;
-					picSize.height = PictureSizes.get(i).height;
-					widDiff = curDiff;
-				}
-
-				Log.i("PictureSizes", "width:" + PictureSizes.get(i).width
-						+ " height:" + PictureSizes.get(i).height);
-			}
-			Log.i("PictureSizes Used", "width:" + picSize.width + " height:"
-					+ picSize.height);
-
-			// 查找与宽度IPC_WIDTH相近的预览尺寸，作为IPC传输的默认尺寸。
-			ipcSize = PreviewSizes.get(0);
-			widDiff = Math.abs(picSize.width - IPC_WIDTH);
-			for (int i = 0; i < PreviewSizes.size(); i++)
-			{
-				int curDiff = Math.abs(PreviewSizes.get(i).width - IPC_WIDTH);
-				if (widDiff > curDiff)
-				{
-					ipcSize.width = PreviewSizes.get(i).width;
-					ipcSize.height = PreviewSizes.get(i).height;
-					widDiff = curDiff;
-				}
-			}
-			Log.i("IPC sizes Used", "width:" + ipcSize.width + " height:"
-					+ ipcSize.height);
-
-			parameters.setPictureFormat(PixelFormat.JPEG);
-			parameters.setPictureSize(picSize.width, picSize.height);// (picSize.width,
-																		// picSize.height);
-			parameters.setPreviewSize(ipcSize.width, ipcSize.height);
-			parameters.setJpegQuality(100);
-			// parameters.get
-			mCamera.setParameters(parameters);
-
-			// Install a SurfaceHolder.Callback so we get notified when the
-			// underlying surface is created and destroyed.
-			mHolder = this.getHolder();
-			mHolder.addCallback(this);
-			mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
-
+			mCamera.setPreviewCallback(null);
+			mCamera.stopPreview();
+			mCamera.release(); // release the camera for other applications
+			mCamera = null;
 		}
 	}
+	
 
 	private void releaseMediaRecorder()
 	{
@@ -842,15 +919,15 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			mMediaRec.prepare();
 		} catch (IllegalStateException e)
 		{
-			Log.d("prepareRec",
-					"IllegalStateException preparing MediaRecorder: "
+			Log.d(LOG_TAG,
+					"prepareRec IllegalStateException preparing MediaRecorder: "
 							+ e.getMessage());
 			releaseMediaRecorder();
 			return false;
 		} catch (IOException e)
 		{
-			Log.d("prepareRec",
-					"IOException preparing MediaRecorder: " + e.getMessage());
+			Log.d(LOG_TAG,
+					"prepareRec IOException preparing MediaRecorder: " + e.getMessage());
 			releaseMediaRecorder();
 			return false;
 		}
@@ -861,7 +938,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	public boolean startRec(File vidFile)
 	{
 		// initialize video camera
-		Log.i("startRec", "startRec");
+		Log.i(LOG_TAG, "startRec");
 		if (prepareRec(vidFile))
 		{
 			mMediaRec.start();
@@ -889,7 +966,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		Log.i(LOG_TAG, "surfaceCreated");
 		if (mCamera == null)
 		{
-			openCamera();
+			openCamera(camIndex);
 		}
 		// The Surface has been created, acquire the camera and tell it where
 		// to draw.
@@ -910,19 +987,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	public void surfaceDestroyed(SurfaceHolder holder)
 	{
 		Log.i(LOG_TAG, "surfaceDestroyed");
-
-		stopRec();
-
-		// Surface will be destroyed when we return, so stop the preview.
-		// Because the CameraDevice object is not a shared resource, it's very
-		// important to release it when the activity is paused.
-		if (mCamera != null)
-		{
-			mCamera.setPreviewCallback(null);
-			mCamera.stopPreview();
-			mCamera.release(); // release the camera for other applications
-			mCamera = null;
-		}
+		closeCamera();
 	}
 
 	public void surfaceChanged(SurfaceHolder holder, int format, int w, int h)
