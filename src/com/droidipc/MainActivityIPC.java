@@ -16,6 +16,8 @@ import android.view.Menu;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.SharedPreferences.Editor;
 import android.content.res.Resources;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
@@ -713,43 +715,43 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 	CamPreviewCB previewCallBack;
 	
+	SharedPreferences spCamOpened;
+	
 	Display Container;
 
 	Camera mCamera;
 	Camera.Size picSize;
 	Camera.Size prevSize;
-	final static int IPC_WIDTH = 640;
 	Camera.Size ipcSize;
 	
 	private int camIndex;
 
+	private static final int IPC_BEST_WIDTH = 640;
 	private static final String LOG_TAG = "CamView";
 
 	CamView(Context context, CamPreviewCB camPreviewCB, Display camContainer)
 	{
 		super(context);
 		
-		camIndex=0;
-		
+		previewCallBack = camPreviewCB;
 		Container=camContainer;
 		
-		previewCallBack = camPreviewCB;
-		
-		// Install a SurfaceHolder.Callback so we get notified when the
-		// underlying surface is created and destroyed.
 		mHolder = this.getHolder();
 		mHolder.addCallback(this);
 		mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
 		
+        spCamOpened = context.getSharedPreferences("spCamOpened", 0);
+        camIndex=spCamOpened.getInt("camIndex", 0);
 		openCamera(camIndex);
 	}
 	
 	public void switchCam()
 	{
 		closeCamera();
-		if(camIndex==0)
+		
+		if(camIndex<(Camera.getNumberOfCameras()-1))
 		{
-			camIndex=1;
+			camIndex++;
 		}
 		else
 		{
@@ -762,6 +764,10 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			openCamera(camIndex);
 		}
 
+		Editor editor = spCamOpened.edit();
+        editor.putInt("camIndex", camIndex);
+        editor.commit();
+        
 		try
 		{
 			mCamera.setPreviewDisplay(mHolder);
@@ -829,10 +835,10 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 		// 查找与宽度IPC_WIDTH相近的预览尺寸，作为IPC传输的默认尺寸。
 		ipcSize = PreviewSizes.get(0);
-		widDiff = Math.abs(picSize.width - IPC_WIDTH);
+		widDiff = Math.abs(picSize.width - IPC_BEST_WIDTH);
 		for (int i = 0; i < PreviewSizes.size(); i++)
 		{
-			int curDiff = Math.abs(PreviewSizes.get(i).width - IPC_WIDTH);
+			int curDiff = Math.abs(PreviewSizes.get(i).width - IPC_BEST_WIDTH);
 			if (widDiff > curDiff)
 			{
 				ipcSize.width = PreviewSizes.get(i).width;
