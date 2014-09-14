@@ -15,7 +15,7 @@
     <TextView
         android:id="@+id/tvFps"
         android:layout_width="100dp"
-        android:layout_height="50dp"
+        android:layout_height="wrap_content"
         android:layout_alignParentLeft="true"
         android:layout_alignParentTop="true"
         android:textAppearance="?android:attr/textAppearanceMedium"
@@ -24,7 +24,7 @@
     <TextView
         android:id="@+id/tvIp"
         android:layout_width="wrap_content"
-        android:layout_height="50dp"
+        android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
         android:layout_toRightOf="@+id/tvFps"
         android:textAppearance="?android:attr/textAppearanceMedium"
@@ -70,5 +70,30 @@
         android:layout_height="wrap_content"
         android:layout_alignParentRight="true"
         android:text="@string/switchCam" />
+
+    <Button
+        android:id="@+id/buttonSlowExpose"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerVertical="true"
+        android:layout_alignParentLeft="true"
+        android:text="@string/slowExpose" />
+
+    <Button
+        android:id="@+id/buttonExposeTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/buttonSlowExpose"
+        android:layout_alignParentLeft="true"
+        android:text="@string/exposeTime" />
+
+    <TextView
+        android:id="@+id/textViewExposeTim"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:textColor="#F00"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:layout_below="@+id/tvFps"/>
 
 </RelativeLayout>

@@ -29,7 +29,10 @@ import android.graphics.Bitmap.CompressFormat;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ImageFormat;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.YuvImage;
 import android.hardware.Camera;
 import android.hardware.Camera.AutoFocusCallback;
 import android.hardware.Camera.PictureCallback;
@@ -50,6 +53,7 @@ import android.widget.TextView;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -90,34 +94,47 @@ class cFpsCalc
 
 public class MainActivityIPC extends Activity
 {
+	private static final String LOG_TAG = "MainActivityIPC";
+	
 	private CamView mCamView;
 	private boolean isRecording;
-
-	private static final String LOG_TAG = "MainActivityIPC";
 
 	private Button buttonTakePic;
 	private Button buttonRec;
 	private Button btLogin;
 	private Button btSwitchCam;
+	private Button btSlowExpose;
+	private Button btExposeTime;
 	
 	
 	private TextView tvFps;
 	private TextView tvIp;
-
 	private TextView tvLoginMsg;
+	private TextView tvExposeTim;
 
 	Timer timCam;
 
 	static final private int GET_CODE = 0;
 
+	
 	public static final int MSG_TIMER_FPS = 0;
 	public static final int MSG_HTTP_LOGIN_SUCCESS = 1;
 	public static final int MSG_HTTP_LOGIN_LINK_FAIL = 2;
 	public static final int MSG_HTTP_LOGIN_AUTH_FAIL = 3;
+	public static final int MSG_EXPOSE_TIM = 4;
 
 	final int FPS_INTVAL = 500;
+	final int EXPOSE_TIM_INTVAL=1000;
+	
 	final int HTTP_PORT = 9693;
 
+	private boolean isExposing;
+	private ExposeTimRunnable exposeTimRunnable;
+	private int slowExposeTim;
+	private int[] slowExposeBuf;
+	private int slowExposeFrameCnt;
+	
+	
 	private hldMsg mMsgHld;
 
 	HttpServer httpSvr;
@@ -128,14 +145,19 @@ public class MainActivityIPC extends Activity
 
 	private enum DLG
 	{
-		CAM_ERROR, NO_STORAGE, WIFI_LOST, STORAGE_ERROR
+		CAM_ERROR, NO_STORAGE, WIFI_LOST, STORAGE_ERROR, EXPOSE_TIME_SEL
 	};
 
+	private final CharSequence exposeTimeList[]={"2秒", "4秒", "8秒", "16秒", "32秒", "64秒", "128秒", "256秒"};
+	
+	SharedPreferences spMain;
+	
+	
 	public Dialog sysFaultAlert(String title, String desc, final boolean exit)
 	{
 		return new AlertDialog.Builder(this).setTitle("哎呀 " + title + "粗问题了")
 				.setMessage(desc + "!" + (exit ? ",点击\"确定\"退出程序..." : ""))
-				.setPositiveButton("确定", new DialogInterface.OnClickListener()
+				.setPositiveButton(R.string.alert_dialog_ok, new DialogInterface.OnClickListener()
 				{
 					public void onClick(DialogInterface dialog, int whichButton)
 					{
@@ -153,24 +175,44 @@ public class MainActivityIPC extends Activity
 		DLG dlg = DLG.values()[dlgId];
 		switch (dlg)
 		{
-		case CAM_ERROR:
-		{
-			return sysFaultAlert("相机", "无法打开摄像头", true);
+			case CAM_ERROR:
+			{
+				return sysFaultAlert("相机", "无法打开摄像头", true);
+			}
+			case NO_STORAGE:
+			{
+				return sysFaultAlert("存储器", "SD卡不存在或未挂载", true);
+			}
+			case WIFI_LOST:
+			{
+				return sysFaultAlert("WIFI", "WIFI未连接", true);
+			}
+			case STORAGE_ERROR:
+			{
+				return sysFaultAlert("存储器", "SD卡文件系统出错或或未连接", true);
+			}
+			
+			case EXPOSE_TIME_SEL:
+			{
+	            return new AlertDialog.Builder(this)
+	            .setTitle("选择曝光时间")
+	            .setItems(exposeTimeList, new DialogInterface.OnClickListener() {
+	                public void onClick(DialogInterface dialog, int whichButton) {
+	
+	                    /* User clicked on a radio button do some stuff */
+	        			Log.i(LOG_TAG, "whichButton:"+whichButton);
+	        			
+	            		Editor editor = spMain.edit();
+	                    editor.putInt("exposeTime", whichButton);
+	                    editor.commit();
+	                    
+	                    setExposeTimDisp();
+	                }
+	            })
+	           .create();
+			}
+	
 		}
-		case NO_STORAGE:
-		{
-			return sysFaultAlert("存储器", "SD卡不存在或未挂载", true);
-		}
-		case WIFI_LOST:
-		{
-			return sysFaultAlert("WIFI", "WIFI未连接", true);
-		}
-		case STORAGE_ERROR:
-		{
-			return sysFaultAlert("存储器", "SD卡文件系统出错或或未连接", true);
-		}
-		}
-
 		return null;
 	}
 
@@ -198,17 +240,129 @@ public class MainActivityIPC extends Activity
 
 		tvLoginMsg = (TextView) findViewById(R.id.textViewMainLoginMsg);
 
+		tvExposeTim=(TextView)findViewById(R.id.textViewExposeTim);
+		
 		if(camInit())
 		{
+			fpsCalc = new cFpsCalc();
+
+			mMsgHld = new hldMsg();
+
+			timCam = new Timer(true);
+			timCam.schedule(new TimerTask()
+			{
+				@Override
+				public void run()
+				{
+					Message mainMsg = new Message();
+					mainMsg.what = MSG_TIMER_FPS;
+					mMsgHld.sendMessage(mainMsg);
+				}
+			}, FPS_INTVAL, FPS_INTVAL);
+			
 			viewListenerInit();
 			
 			httpServerInit();
 	
 			httpDdnsClient = new HttpDdnsClient();
+			
+			spMain=getSharedPreferences("spMain", 0);
+			setExposeTimDisp();
+			isExposing=false;
+			exposeTimRunnable=new ExposeTimRunnable();
+			new Thread(exposeTimRunnable).start();
 		}
-
 	}
 
+	private class ExposeTimRunnable extends Thread
+	{
+		public void run()
+		{
+			while(isExposing)
+			{
+				Message mainMsg = new Message();
+				mainMsg.what = MSG_EXPOSE_TIM;
+				mMsgHld.sendMessage(mainMsg);
+				
+				try
+				{
+					sleep(EXPOSE_TIM_INTVAL);
+				} catch (InterruptedException e)
+				{
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	private void setExposeTimDisp()
+	{
+		btSlowExpose.setText((2<<spMain.getInt("exposeTime", 0))+"s "+getString(R.string.slowExpose));
+	}
+	
+	private void slowExposeConvert()
+	{
+
+		Log.i(LOG_TAG, "slowExposeFrameCnt:"+slowExposeFrameCnt);
+		
+		byte[] nv21=new byte[slowExposeBuf.length];
+		for(int i=0; i<nv21.length; i++)
+		{
+			nv21[i]=(byte) (slowExposeBuf[i]/slowExposeFrameCnt);
+		}
+		
+		ByteArrayOutputStream jpgStream=new ByteArrayOutputStream();
+		
+		YuvImage yuv=new YuvImage(nv21, ImageFormat.NV21, 
+				mCamView.prevSize.width, mCamView.prevSize.height, null);
+		try
+		{
+			jpgStream.reset();
+			long tim=System.currentTimeMillis();
+			yuv.compressToJpeg(new Rect(0, 0, mCamView.prevSize.width, mCamView.prevSize.height),
+                    100, jpgStream);
+			
+			tim=System.currentTimeMillis()-tim;
+			Log.i(LOG_TAG, "compressToJpeg time:"+tim+"ms size:"+
+					jpgStream.size()+" "+(jpgStream.size()/1024)+"KB");
+		}catch(Exception e)
+		{
+			e.printStackTrace();
+		}
+		
+		File appDir = getAppDir();
+		if (appDir != null)
+		{
+			try
+			{
+				String timeStamp = new SimpleDateFormat("yyyy_MMdd_HHmmss")
+						.format(new Date());
+				File pic = new File(appDir, "SE_ " + timeStamp + ".jpg");
+				Log.i(LOG_TAG, pic.toString());
+				FileOutputStream fos = new FileOutputStream(pic);
+				fos.write(jpgStream.toByteArray());
+				fos.close();
+			} catch(IOException e)
+			{
+				e.printStackTrace();
+			}
+		}
+		
+	}
+	
+	private void stopSlowExpose()
+	{
+		isExposing=false;
+		
+		slowExposeConvert();
+		
+		setExposeTimDisp();
+		tvExposeTim.setText("");
+		btExposeTime.setEnabled(true);
+		btSwitchCam.setEnabled(true);
+	}
+	
 	protected void onStart()
 	{
 		super.onStart();
@@ -220,7 +374,10 @@ public class MainActivityIPC extends Activity
 		super.onResume();
 		Log.i(LOG_TAG, "onResume");
 
-		httpDdnsClient.setMsgHandler(mMsgHld);
+		if(httpDdnsClient!=null)
+		{
+			httpDdnsClient.setMsgHandler(mMsgHld);
+		}
 	}
 
 	protected void onPause()
@@ -340,6 +497,23 @@ public class MainActivityIPC extends Activity
 				tvLoginMsg.setText("登录失败，无法连接服务器！");
 				break;
 			}
+			
+			case MSG_EXPOSE_TIM:
+			{
+				tvExposeTim.setText(String.valueOf(slowExposeTim));
+
+				Log.i(LOG_TAG, "Slow Expose "+slowExposeTim);
+				
+				if(slowExposeTim!=0)
+				{
+					slowExposeTim--;
+				}
+				else
+				{
+					stopSlowExpose();
+				}
+				break;
+			}
 
 			default:
 				break;
@@ -362,22 +536,6 @@ public class MainActivityIPC extends Activity
 		}
 	
 		framePreview.addView(mCamView);
-
-		fpsCalc = new cFpsCalc();
-
-		mMsgHld = new hldMsg();
-
-		timCam = new Timer(true);
-		timCam.schedule(new TimerTask()
-		{
-			@Override
-			public void run()
-			{
-				Message CMsg = new Message();
-				CMsg.what = MSG_TIMER_FPS;
-				mMsgHld.sendMessage(CMsg);
-			}
-		}, FPS_INTVAL, FPS_INTVAL);
 
 		return true;
 	}
@@ -460,6 +618,47 @@ public class MainActivityIPC extends Activity
 				mCamView.switchCam();
 			}
 		});
+		
+		btSlowExpose=(Button)findViewById(R.id.buttonSlowExpose);
+		btSlowExpose.setOnClickListener(new View.OnClickListener()
+		{
+			
+			@Override
+			public void onClick(View v)
+			{
+				//开始拍照
+				if(!isExposing)
+				{
+					isExposing=true;
+					btSlowExpose.setText(getString(R.string.stopSlowExpose));
+
+					slowExposeTim=2<<spMain.getInt("exposeTime", 0);
+					slowExposeFrameCnt=0;
+					new Thread(exposeTimRunnable).start();
+					
+					btExposeTime.setEnabled(false);
+					btSwitchCam.setEnabled(false);
+				}
+				//停止拍照
+				else
+				{
+					stopSlowExpose();
+				}
+			}
+		});
+		
+		btExposeTime=(Button)findViewById(R.id.buttonExposeTime);
+		btExposeTime.setOnClickListener(new View.OnClickListener()
+		{
+			
+			@Override
+			public void onClick(View v)
+			{
+				// TODO Auto-generated method stub
+				showDialog(DLG.EXPOSE_TIME_SEL.ordinal());
+			}
+		});
+		
 	}
 
 	public class CamPreviewCB implements Camera.PreviewCallback
@@ -481,6 +680,20 @@ public class MainActivityIPC extends Activity
 			{
 				httpSvr.synImg.setImgData(data, mCamView.ipcSize.width,
 						mCamView.ipcSize.height);
+			}
+			
+			if(isExposing)
+			{
+				if(slowExposeBuf==null)
+				{
+					slowExposeBuf=new int[data.length];
+				}
+				
+				for(int i=0; i<data.length; i++)
+				{
+					slowExposeBuf[i]+=data[i];
+				}
+				slowExposeFrameCnt++;
 			}
 		}
 	}
@@ -851,7 +1064,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 		parameters.setPictureFormat(PixelFormat.JPEG);
 		parameters.setPictureSize(picSize.width, picSize.height);// (picSize.width,
-																	// picSize.height);
+
 		parameters.setPreviewSize(ipcSize.width, ipcSize.height);
 		parameters.setJpegQuality(100);
 		// parameters.get
