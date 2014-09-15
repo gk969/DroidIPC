@@ -33,6 +33,7 @@ import android.graphics.ImageFormat;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
+import android.graphics.drawable.BitmapDrawable;
 import android.hardware.Camera;
 import android.hardware.Camera.AutoFocusCallback;
 import android.hardware.Camera.PictureCallback;
@@ -53,8 +54,10 @@ import android.widget.TextView;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -128,7 +131,13 @@ public class MainActivityIPC extends Activity
 	
 	final int HTTP_PORT = 9693;
 
-	private boolean isExposing;
+	
+	private int slowExposeState;
+
+	private final int SE_IDLE=0;
+	private final int SE_EXPOSING=1;
+	private final int SE_DISPLAY=2;
+	
 	private ExposeTimRunnable exposeTimRunnable;
 	private int slowExposeTim;
 	private int[] slowExposeBuf;
@@ -268,7 +277,7 @@ public class MainActivityIPC extends Activity
 			
 			spMain=getSharedPreferences("spMain", 0);
 			setExposeTimDisp();
-			isExposing=false;
+			slowExposeState=SE_IDLE;
 			exposeTimRunnable=new ExposeTimRunnable();
 			new Thread(exposeTimRunnable).start();
 		}
@@ -278,7 +287,7 @@ public class MainActivityIPC extends Activity
 	{
 		public void run()
 		{
-			while(isExposing)
+			while(slowExposeState==SE_EXPOSING)
 			{
 				Message mainMsg = new Message();
 				mainMsg.what = MSG_EXPOSE_TIM;
@@ -289,7 +298,6 @@ public class MainActivityIPC extends Activity
 					sleep(EXPOSE_TIM_INTVAL);
 				} catch (InterruptedException e)
 				{
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 			}
@@ -301,16 +309,37 @@ public class MainActivityIPC extends Activity
 		btSlowExpose.setText((2<<spMain.getInt("exposeTime", 0))+"s "+getString(R.string.slowExpose));
 	}
 	
-	private void slowExposeConvert()
+	private synchronized byte[] getOrAddNv21Buf(byte[] srcData, boolean isRead)
+	{
+		if(isRead)
+		{
+			byte[] nv21=new byte[slowExposeBuf.length];
+			for(int i=0; i<nv21.length; i++)
+			{
+				nv21[i]=(byte) (slowExposeBuf[i]/slowExposeFrameCnt);
+			}
+			return nv21;
+		}
+		
+
+		if(slowExposeFrameCnt<2)
+		{
+			for(int i=0; i<srcData.length; i++)
+			{
+				slowExposeBuf[i]+=srcData[i];
+			}
+			slowExposeFrameCnt++;
+		}
+		
+		return null;
+	}
+	
+	private Bitmap slowExposeConvert()
 	{
 
 		Log.i(LOG_TAG, "slowExposeFrameCnt:"+slowExposeFrameCnt);
 		
-		byte[] nv21=new byte[slowExposeBuf.length];
-		for(int i=0; i<nv21.length; i++)
-		{
-			nv21[i]=(byte) (slowExposeBuf[i]/slowExposeFrameCnt);
-		}
+		byte[] nv21=getOrAddNv21Buf(null, true);
 		
 		ByteArrayOutputStream jpgStream=new ByteArrayOutputStream();
 		
@@ -332,6 +361,7 @@ public class MainActivityIPC extends Activity
 		}
 		
 		File appDir = getAppDir();
+		byte[] jpgArray=jpgStream.toByteArray();
 		if (appDir != null)
 		{
 			try
@@ -341,22 +371,39 @@ public class MainActivityIPC extends Activity
 				File pic = new File(appDir, "SE_ " + timeStamp + ".jpg");
 				Log.i(LOG_TAG, pic.toString());
 				FileOutputStream fos = new FileOutputStream(pic);
-				fos.write(jpgStream.toByteArray());
+				fos.write(jpgArray);
 				fos.close();
+				
 			} catch(IOException e)
 			{
 				e.printStackTrace();
 			}
 		}
 		
+		InputStream is=new ByteArrayInputStream(jpgArray);
+		return BitmapFactory.decodeStream(is);
 	}
 	
 	private void stopSlowExpose()
 	{
-		isExposing=false;
 		
-		slowExposeConvert();
-		
+		Bitmap bmp=slowExposeConvert();
+		if(bmp!=null)
+		{
+			slowExposeState=SE_DISPLAY;
+			
+			mCamView.closeCamera();
+			
+			SurfaceHolder hld=mCamView.getHolder();
+			Canvas playbackCvs=hld.lockCanvas();
+			playbackCvs.drawBitmap(bmp, 0, 0, null);
+			hld.unlockCanvasAndPost(playbackCvs);
+		}
+		else
+		{
+			slowExposeState=SE_IDLE;
+		}
+			
 		setExposeTimDisp();
 		tvExposeTim.setText("");
 		btExposeTime.setEnabled(true);
@@ -438,15 +485,12 @@ public class MainActivityIPC extends Activity
 	private void httpServerInit()
 	{
 		File webDir = getWebDir();
-		if (webFileToSD())
+		try
 		{
-			try
-			{
-				httpSvr = new HttpServer(HTTP_PORT, webDir);
-			} catch (IOException e)
-			{
-				e.printStackTrace();
-			}
+			httpSvr = new HttpServer(this, HTTP_PORT, webDir);
+		} catch (IOException e)
+		{
+			e.printStackTrace();
 		}
 	}
 
@@ -477,7 +521,6 @@ public class MainActivityIPC extends Activity
 
 				} catch (JSONException e)
 				{
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 
@@ -547,7 +590,16 @@ public class MainActivityIPC extends Activity
 		{
 			public void onClick(View v)
 			{
-				mCamView.mCamera.autoFocus(null);
+				if(slowExposeState==SE_DISPLAY)
+				{
+					slowExposeState=SE_IDLE;
+					mCamView.openCamera(mCamView.camIndex);
+					mCamView.StartPreview();
+				}
+				else
+				{
+					mCamView.mCamera.autoFocus(null);
+				}
 			}
 		});
 
@@ -614,7 +666,6 @@ public class MainActivityIPC extends Activity
 			@Override
 			public void onClick(View v)
 			{
-				// TODO Auto-generated method stub
 				mCamView.switchCam();
 			}
 		});
@@ -627,9 +678,9 @@ public class MainActivityIPC extends Activity
 			public void onClick(View v)
 			{
 				//开始拍照
-				if(!isExposing)
+				if(slowExposeState==SE_IDLE)
 				{
-					isExposing=true;
+					slowExposeState=SE_EXPOSING;
 					btSlowExpose.setText(getString(R.string.stopSlowExpose));
 
 					slowExposeTim=2<<spMain.getInt("exposeTime", 0);
@@ -640,7 +691,7 @@ public class MainActivityIPC extends Activity
 					btSwitchCam.setEnabled(false);
 				}
 				//停止拍照
-				else
+				else if(slowExposeState==SE_EXPOSING)
 				{
 					stopSlowExpose();
 				}
@@ -654,7 +705,6 @@ public class MainActivityIPC extends Activity
 			@Override
 			public void onClick(View v)
 			{
-				// TODO Auto-generated method stub
 				showDialog(DLG.EXPOSE_TIME_SEL.ordinal());
 			}
 		});
@@ -678,22 +728,19 @@ public class MainActivityIPC extends Activity
 
 			if (httpSvr != null)
 			{
-				httpSvr.synImg.setImgData(data, mCamView.ipcSize.width,
-						mCamView.ipcSize.height);
+				httpSvr.synImg.setImgData(data, mCamView.prevSize.width,
+						mCamView.prevSize.height);
 			}
 			
-			if(isExposing)
+			if(slowExposeState==SE_EXPOSING)
 			{
 				if(slowExposeBuf==null)
 				{
 					slowExposeBuf=new int[data.length];
 				}
 				
-				for(int i=0; i<data.length; i++)
-				{
-					slowExposeBuf[i]+=data[i];
-				}
-				slowExposeFrameCnt++;
+				getOrAddNv21Buf(data, false);
+				
 			}
 		}
 	}
@@ -703,7 +750,6 @@ public class MainActivityIPC extends Activity
 		@Override
 		public void onAutoFocus(boolean success, Camera camera)
 		{
-			// TODO Auto-generated method stub
 			if (success)
 			{
 				PictureCallback mPicture = new CameraPictureCallBack();
@@ -791,51 +837,6 @@ public class MainActivityIPC extends Activity
 		return dir;
 	}
 
-	public boolean webFileToSD()
-	{
-		File webFile = null;
-		File webDir = getWebDir();
-
-		if (webDir == null)
-		{
-			return false;
-		}
-
-		int[] webFileRawId = { R.raw.index, R.raw.proc };
-		String[] webFileName = { "index.html", "proc.js" };
-		final int webFileNum = webFileRawId.length;
-		if (webFileNum != webFileName.length)
-		{
-			return false;
-		}
-
-		for (int i = 0; i < webFileNum; i++)
-		{
-			webFile = new File(webDir, webFileName[i]);
-			Log.i(LOG_TAG, webFile.toString());
-			try
-			{
-				InputStream rawIn = getResources().openRawResource(
-						webFileRawId[i]);
-				FileOutputStream fos = new FileOutputStream(webFile);
-
-				int length;
-				byte[] buffer = new byte[1024 * 32];
-				while ((length = rawIn.read(buffer)) != -1)
-				{
-					fos.write(buffer, 0, length);
-				}
-				rawIn.close();
-				fos.close();
-			} catch (IOException ioe)
-			{
-				Log.e(LOG_TAG, ioe.toString());
-				return false;
-			}
-		}
-		return true;
-	}
-
 	public String getLocalIp()
 	{
 		try
@@ -919,7 +920,34 @@ public class MainActivityIPC extends Activity
 
 }
 
-// ----------------------------------------------------------------------
+class SurfaceMask extends SurfaceView implements SurfaceHolder.Callback
+{
+
+	public SurfaceMask(Context context)
+	{
+		super(context);
+	}
+
+	@Override
+	public void surfaceChanged(SurfaceHolder holder, int format, int width,
+			int height)
+	{
+		
+	}
+
+	@Override
+	public void surfaceCreated(SurfaceHolder holder)
+	{
+		
+	}
+
+	@Override
+	public void surfaceDestroyed(SurfaceHolder holder)
+	{
+		
+	}
+	
+}
 
 class CamView extends SurfaceView implements SurfaceHolder.Callback
 {
@@ -935,9 +963,8 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	Camera mCamera;
 	Camera.Size picSize;
 	Camera.Size prevSize;
-	Camera.Size ipcSize;
 	
-	private int camIndex;
+	int camIndex;
 
 	private static final int IPC_BEST_WIDTH = 640;
 	private static final String LOG_TAG = "CamView";
@@ -949,12 +976,13 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		previewCallBack = camPreviewCB;
 		Container=camContainer;
 		
+        spCamOpened = context.getSharedPreferences("spCamOpened", 0);
+        camIndex=spCamOpened.getInt("camIndex", 0);
+        
 		mHolder = this.getHolder();
 		mHolder.addCallback(this);
 		mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
-		
-        spCamOpened = context.getSharedPreferences("spCamOpened", 0);
-        camIndex=spCamOpened.getInt("camIndex", 0);
+        
 		openCamera(camIndex);
 	}
 	
@@ -974,26 +1002,30 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		if(!openCamera(camIndex))
 		{
 			camIndex=0;
-			openCamera(camIndex);
+			openCamera(0);
 		}
 
 		Editor editor = spCamOpened.edit();
         editor.putInt("camIndex", camIndex);
         editor.commit();
         
+        StartPreview();
+	}
+
+	public void StartPreview()
+	{
 		try
 		{
 			mCamera.setPreviewDisplay(mHolder);
 		} catch (IOException e)
 		{
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		mCamera.setPreviewCallback(previewCallBack);
 		mCamera.startPreview();
 	}
-
-	private boolean openCamera(int cam)
+	
+	public boolean openCamera(int cam)
 	{
 		mCamera = Camera.open(cam);
 		if (mCamera == null)
@@ -1046,42 +1078,27 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		Log.i(LOG_TAG, "PictureSizes Used width:" + picSize.width + " height:"
 				+ picSize.height);
 
-		// 查找与宽度IPC_WIDTH相近的预览尺寸，作为IPC传输的默认尺寸。
-		ipcSize = PreviewSizes.get(0);
-		widDiff = Math.abs(picSize.width - IPC_BEST_WIDTH);
-		for (int i = 0; i < PreviewSizes.size(); i++)
-		{
-			int curDiff = Math.abs(PreviewSizes.get(i).width - IPC_BEST_WIDTH);
-			if (widDiff > curDiff)
-			{
-				ipcSize.width = PreviewSizes.get(i).width;
-				ipcSize.height = PreviewSizes.get(i).height;
-				widDiff = curDiff;
-			}
-		}
-		Log.i(LOG_TAG, "IPC sizes Used width:" + ipcSize.width + " height:"
-				+ ipcSize.height);
-
 		parameters.setPictureFormat(PixelFormat.JPEG);
 		parameters.setPictureSize(picSize.width, picSize.height);// (picSize.width,
 
-		parameters.setPreviewSize(ipcSize.width, ipcSize.height);
+		parameters.setPreviewSize(prevSize.width, prevSize.height);
 		parameters.setJpegQuality(100);
 		// parameters.get
 		mCamera.setParameters(parameters);
 
 		Log.i(LOG_TAG,
 				"screen:" + Container.getWidth() + " " + Container.getHeight());
-		Log.i(LOG_TAG, "mCamView:" + ipcSize.width + " "
-				+ ipcSize.height);
+		Log.i(LOG_TAG, "mCamView:" + prevSize.width + " "
+				+ prevSize.height);
 
-		mHolder.setFixedSize(ipcSize.width * Container.getHeight()/
-							 ipcSize.height, Container.getHeight());
+
+		mHolder.setFixedSize(prevSize.width * Container.getHeight()/
+				prevSize.height, Container.getHeight());
 		
 		return true;
 	}
 	
-	private void closeCamera()
+	public void closeCamera()
 	{
 		stopRec();
 
@@ -1198,7 +1215,6 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			{
 				mCamera.release();
 				mCamera = null;
-				// TODO: add more exception handling logic here
 			}
 		}
 	}
@@ -1218,12 +1234,6 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		if (mCamera != null)
 		{
 			mCamera.setPreviewCallback(previewCallBack);
-			/*
-			Camera.Parameters parameters = mCamera.getParameters();
-			parameters.setPreviewSize(w, h);
-			Log.i("DroidIPC", "surfaceChanged format:"+format+" size:"+w+","+h);
-			mCamera.setParameters(parameters);
-			*/
 			mCamera.startPreview();
 		}
 

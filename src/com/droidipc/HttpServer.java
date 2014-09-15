@@ -10,6 +10,7 @@ import java.util.Properties;
 
 import com.droidipc.NanoHTTPD.Response;
 
+import android.content.Context;
 import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
@@ -59,14 +60,24 @@ public class HttpServer extends NanoHTTPD
 {
     private File homeDir;
     final String LOG_TAG="HttpServer";
+
+    final int webIndexRawId=R.raw.index;
+    final String webIndexFileName="index.html";
+    
+	final int[] webFileRawId = {R.raw.proc };
+    final String[] webFileName = { "proc.js" };
+	final int webFileNum = webFileRawId.length;
     
     CsynImg synImg;
     
-	public HttpServer(int port, File webDir) throws IOException
+    Context mainContext;
+    
+	public HttpServer(Context ctx, int port, File webDir) throws IOException
 	{
 		super(port, webDir);
 		homeDir=webDir;
 		synImg=new CsynImg();
+		mainContext=ctx;
 	}
 	
 	public void close()
@@ -106,7 +117,7 @@ public class HttpServer extends NanoHTTPD
 	public Response serve( String uri, String method, Properties header, Properties parms, Properties files ) {
         Log.i(LOG_TAG, "serve "+ method + " '" + uri + "' ");
         
-        String target=uri.toString().substring(1);
+        String target=uri.substring(1);
         
         Log.i(LOG_TAG, "target "+target);
         
@@ -133,6 +144,22 @@ public class HttpServer extends NanoHTTPD
 				return res;
 	        }
         }
+        
+        if(uri.compareTo("/")==0)
+        {
+            return new Response(HTTP_OK, NanoHTTPD.MIME_HTML,
+    				mainContext.getResources().openRawResource(webIndexRawId));
+        }
+        
+        for(int i=0; i<webFileNum; i++)
+        {
+        	if(target.compareTo(webFileName[i])==0)
+        	{
+        		return new Response(HTTP_OK, NanoHTTPD.MIME_HTML,
+        				mainContext.getResources().openRawResource(webFileRawId[i]));
+        	}
+        }
+        
         return serveFile( uri, header, homeDir, true); 
 	}
 	
