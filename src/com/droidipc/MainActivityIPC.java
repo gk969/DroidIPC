@@ -100,6 +100,9 @@ public class MainActivityIPC extends Activity
 	private static final String LOG_TAG = "MainActivityIPC";
 	
 	private CamView mCamView;
+	private SurfaceView	camMask;
+	private SurfaceHolder camMaskHld;
+	
 	private boolean isRecording;
 
 	private Button buttonTakePic;
@@ -394,10 +397,11 @@ public class MainActivityIPC extends Activity
 			
 			mCamView.closeCamera();
 			
-			SurfaceHolder hld=mCamView.getHolder();
-			Canvas playbackCvs=hld.lockCanvas();
-			playbackCvs.drawBitmap(bmp, 0, 0, null);
-			hld.unlockCanvasAndPost(playbackCvs);
+
+			Canvas camMaskCvs=camMaskHld.lockCanvas();
+			camMaskCvs.drawBitmap(slowExposeConvert(), 0, 0, null);
+			camMaskHld.unlockCanvasAndPost(camMaskCvs);
+			camMaskHld.setFixedSize(mCamView.getWidth(), mCamView.getHeight());
 		}
 		else
 		{
@@ -577,9 +581,13 @@ public class MainActivityIPC extends Activity
 			showDialog(DLG.CAM_ERROR.ordinal());
 			return false;
 		}
-	
 		framePreview.addView(mCamView);
-
+		
+		/**/
+		camMask=(SurfaceView)findViewById(R.id.surfaceViewCamMask);
+		camMaskHld=camMask.getHolder();
+		camMaskHld.addCallback(new SurfaceMaskCB());
+		
 		return true;
 	}
 	
@@ -920,13 +928,9 @@ public class MainActivityIPC extends Activity
 
 }
 
-class SurfaceMask extends SurfaceView implements SurfaceHolder.Callback
+class SurfaceMaskCB implements SurfaceHolder.Callback
 {
-
-	public SurfaceMask(Context context)
-	{
-		super(context);
-	}
+	final String LOG_TAG="SurfaceMask";
 
 	@Override
 	public void surfaceChanged(SurfaceHolder holder, int format, int width,
@@ -938,13 +942,13 @@ class SurfaceMask extends SurfaceView implements SurfaceHolder.Callback
 	@Override
 	public void surfaceCreated(SurfaceHolder holder)
 	{
-		
+		Log.i(LOG_TAG, "SurfaceMask Created");
 	}
 
 	@Override
 	public void surfaceDestroyed(SurfaceHolder holder)
 	{
-		
+		Log.i(LOG_TAG, "SurfaceMask Destroyed");
 	}
 	
 }
@@ -966,7 +970,6 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	
 	int camIndex;
 
-	private static final int IPC_BEST_WIDTH = 640;
 	private static final String LOG_TAG = "CamView";
 
 	CamView(Context context, CamPreviewCB camPreviewCB, Display camContainer)
