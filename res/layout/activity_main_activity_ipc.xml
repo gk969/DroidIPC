@@ -12,12 +12,6 @@
         android:layout_height="fill_parent"
         android:layout_centerInParent="true" >
     </FrameLayout>
-    
-    <SurfaceView
-        android:id="@+id/surfaceViewCamMask"
-        android:layout_width="wrap_content"
-        android:layout_height="fill_parent" 
-        android:layout_centerInParent="true" />
 
     <TextView
         android:id="@+id/tvFps"

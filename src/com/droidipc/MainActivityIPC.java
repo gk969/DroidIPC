@@ -30,6 +30,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ImageFormat;
+import android.graphics.Matrix;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
@@ -45,11 +46,14 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceHolder.Callback;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import java.io.BufferedInputStream;
@@ -100,8 +104,7 @@ public class MainActivityIPC extends Activity
 	private static final String LOG_TAG = "MainActivityIPC";
 	
 	private CamView mCamView;
-	private SurfaceView	camMask;
-	private SurfaceHolder camMaskHld;
+	private SurfaceMask	camMask;
 	
 	private boolean isRecording;
 
@@ -321,18 +324,18 @@ public class MainActivityIPC extends Activity
 			{
 				nv21[i]=(byte) (slowExposeBuf[i]/slowExposeFrameCnt);
 			}
+			slowExposeBuf=null;
 			return nv21;
 		}
 		
 
-		if(slowExposeFrameCnt<2)
+		for(int i=0; i<srcData.length; i++)
 		{
-			for(int i=0; i<srcData.length; i++)
-			{
-				slowExposeBuf[i]+=srcData[i];
-			}
-			slowExposeFrameCnt++;
+			int unsignedByte=srcData[i]&0x0FF;
+			
+			slowExposeBuf[i]+=unsignedByte;
 		}
+		slowExposeFrameCnt++;
 		
 		return null;
 	}
@@ -363,8 +366,10 @@ public class MainActivityIPC extends Activity
 			e.printStackTrace();
 		}
 		
-		File appDir = getAppDir();
 		byte[] jpgArray=jpgStream.toByteArray();
+		
+		/*
+		File appDir = getAppDir();
 		if (appDir != null)
 		{
 			try
@@ -382,9 +387,27 @@ public class MainActivityIPC extends Activity
 				e.printStackTrace();
 			}
 		}
+		*/
 		
 		InputStream is=new ByteArrayInputStream(jpgArray);
 		return BitmapFactory.decodeStream(is);
+	}
+	
+	
+	public static Bitmap zoomBmp(Bitmap bm, int newWidth ,int newHeight)
+	{
+	   // 获得图片的宽高
+	   int width = bm.getWidth();
+	   int height = bm.getHeight();
+	   // 计算缩放比例
+	   float scaleWidth = ((float) newWidth) / width;
+	   float scaleHeight = ((float) newHeight) / height;
+	   // 取得想要缩放的matrix参数
+	   Matrix matrix = new Matrix();
+	   matrix.postScale(scaleWidth, scaleHeight);
+	   // 得到新的图片
+
+	   return Bitmap.createBitmap(bm, 0, 0, width, height, matrix, true);
 	}
 	
 	private void stopSlowExpose()
@@ -395,13 +418,9 @@ public class MainActivityIPC extends Activity
 		{
 			slowExposeState=SE_DISPLAY;
 			
-			mCamView.closeCamera();
-			
+			camMask.drawBitmap(zoomBmp(bmp, mCamView.prevDispWidth, mCamView.prevDispHeight),
+					mCamView.prevDispWidth, mCamView.prevDispHeight);
 
-			Canvas camMaskCvs=camMaskHld.lockCanvas();
-			camMaskCvs.drawBitmap(slowExposeConvert(), 0, 0, null);
-			camMaskHld.unlockCanvasAndPost(camMaskCvs);
-			camMaskHld.setFixedSize(mCamView.getWidth(), mCamView.getHeight());
 		}
 		else
 		{
@@ -409,9 +428,9 @@ public class MainActivityIPC extends Activity
 		}
 			
 		setExposeTimDisp();
+
+		btSlowExpose.setEnabled(false);
 		tvExposeTim.setText("");
-		btExposeTime.setEnabled(true);
-		btSwitchCam.setEnabled(true);
 	}
 	
 	protected void onStart()
@@ -583,10 +602,10 @@ public class MainActivityIPC extends Activity
 		}
 		framePreview.addView(mCamView);
 		
-		/**/
-		camMask=(SurfaceView)findViewById(R.id.surfaceViewCamMask);
-		camMaskHld=camMask.getHolder();
-		camMaskHld.addCallback(new SurfaceMaskCB());
+		camMask=new SurfaceMask(this, mCamView.prevDispWidth, mCamView.prevDispHeight);
+		framePreview.addView(camMask);
+		
+		//camMask.setVisibility(View.INVISIBLE);
 		
 		return true;
 	}
@@ -601,8 +620,11 @@ public class MainActivityIPC extends Activity
 				if(slowExposeState==SE_DISPLAY)
 				{
 					slowExposeState=SE_IDLE;
-					mCamView.openCamera(mCamView.camIndex);
-					mCamView.StartPreview();
+					camMask.setVisibility(View.INVISIBLE);
+
+					btExposeTime.setEnabled(true);
+					btSwitchCam.setEnabled(true);
+					btSlowExpose.setEnabled(true);
 				}
 				else
 				{
@@ -928,21 +950,55 @@ public class MainActivityIPC extends Activity
 
 }
 
-class SurfaceMaskCB implements SurfaceHolder.Callback
+class SurfaceMask extends SurfaceView implements SurfaceHolder.Callback
 {
+	SurfaceHolder hld;
+	
+	int maskWidth;
+	int maskHeight;
+	
 	final String LOG_TAG="SurfaceMask";
 
-	@Override
-	public void surfaceChanged(SurfaceHolder holder, int format, int width,
-			int height)
+	public SurfaceMask(Context context, int width, int height)
 	{
+		super(context);
+		// TODO Auto-generated constructor stub
 		
+		maskWidth=width;
+		maskHeight=height;
+		
+		hld=this.getHolder();
+		hld.addCallback(this);
+		this.setZOrderOnTop(true);
+	}
+
+	void drawBitmap(Bitmap bmp, int dispWidth, int dispHeight)
+	{
+		this.setVisibility(View.VISIBLE);
+		Log.i(LOG_TAG, "drawBitmap "+dispWidth+" "+dispHeight);
+		this.setLayoutParams(new FrameLayout.LayoutParams(dispWidth, dispHeight));
+		hld.setFixedSize(dispWidth, dispHeight);
+		
+		Canvas camMaskCvs=hld.lockCanvas();
+		camMaskCvs.drawBitmap(bmp, 0, 0, null);
+		hld.unlockCanvasAndPost(camMaskCvs);
+		
+	}
+	
+	@Override
+	public void surfaceChanged(SurfaceHolder holder, int format, int width, int height)
+	{
+		Log.i(LOG_TAG, "SurfaceMask Changed width:"+width+" height:"+height);
 	}
 
 	@Override
 	public void surfaceCreated(SurfaceHolder holder)
 	{
 		Log.i(LOG_TAG, "SurfaceMask Created");
+		this.setLayoutParams(new FrameLayout.LayoutParams(maskWidth, maskHeight));
+		hld.setFixedSize(maskWidth, maskHeight);
+
+		//this.setVisibility(View.INVISIBLE);
 	}
 
 	@Override
@@ -963,6 +1019,9 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	SharedPreferences spCamOpened;
 	
 	Display Container;
+	
+	int prevDispWidth;
+	int prevDispHeight;
 
 	Camera mCamera;
 	Camera.Size picSize;
@@ -1094,9 +1153,10 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		Log.i(LOG_TAG, "mCamView:" + prevSize.width + " "
 				+ prevSize.height);
 
+		prevDispWidth=prevSize.width * Container.getHeight()/prevSize.height;
+		prevDispHeight=Container.getHeight();
 
-		mHolder.setFixedSize(prevSize.width * Container.getHeight()/
-				prevSize.height, Container.getHeight());
+		mHolder.setFixedSize(prevDispWidth, prevDispHeight);
 		
 		return true;
 	}
@@ -1232,7 +1292,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	{
 		// Now that the size is known, set up the camera parameters and begin
 		// the preview.
-		Log.i(LOG_TAG, "surfaceChanged");
+		Log.i(LOG_TAG, "surfaceChanged "+w+" "+h);
 
 		if (mCamera != null)
 		{
