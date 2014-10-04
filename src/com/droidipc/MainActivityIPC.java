@@ -36,11 +36,17 @@ import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.graphics.drawable.BitmapDrawable;
 import android.hardware.Camera;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.hardware.Camera.AutoFocusCallback;
+import android.hardware.Camera.CameraInfo;
 import android.hardware.Camera.PictureCallback;
 import android.hardware.Camera.PreviewCallback;
 import android.hardware.Camera.Size;
 import android.view.Display;
+import android.view.LayoutInflater;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceHolder.Callback;
@@ -55,6 +61,8 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
+import android.widget.RadioGroup;
+import android.widget.RadioButton;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -102,20 +110,20 @@ class cFpsCalc
 public class MainActivityIPC extends Activity
 {
 	private static final String LOG_TAG = "MainActivityIPC";
-	
+
 	private CamView mCamView;
-	private SurfaceMask	camMask;
-	
+	private SurfaceMask camMask;
+
 	private boolean isRecording;
 
 	private Button buttonTakePic;
 	private Button buttonRec;
 	private Button btLogin;
 	private Button btSwitchCam;
+	private Button btRotationCam;
 	private Button btSlowExpose;
 	private Button btExposeTime;
-	
-	
+
 	private TextView tvFps;
 	private TextView tvIp;
 	private TextView tvLoginMsg;
@@ -125,7 +133,6 @@ public class MainActivityIPC extends Activity
 
 	static final private int GET_CODE = 0;
 
-	
 	public static final int MSG_TIMER_FPS = 0;
 	public static final int MSG_HTTP_LOGIN_SUCCESS = 1;
 	public static final int MSG_HTTP_LOGIN_LINK_FAIL = 2;
@@ -133,23 +140,21 @@ public class MainActivityIPC extends Activity
 	public static final int MSG_EXPOSE_TIM = 4;
 
 	final int FPS_INTVAL = 500;
-	final int EXPOSE_TIM_INTVAL=1000;
-	
+	final int EXPOSE_TIM_INTVAL = 1000;
+
 	final int HTTP_PORT = 9693;
 
-	
 	private int slowExposeState;
 
-	private final int SE_IDLE=0;
-	private final int SE_EXPOSING=1;
-	private final int SE_DISPLAY=2;
-	
+	private final int SE_IDLE = 0;
+	private final int SE_EXPOSING = 1;
+	private final int SE_DISPLAY = 2;
+
 	private ExposeTimRunnable exposeTimRunnable;
-	private int slowExposeTim;
+	private int slowExposeTimer;
 	private int[] slowExposeBuf;
 	private int slowExposeFrameCnt;
-	
-	
+
 	private hldMsg mMsgHld;
 
 	HttpServer httpSvr;
@@ -160,28 +165,33 @@ public class MainActivityIPC extends Activity
 
 	private enum DLG
 	{
-		CAM_ERROR, NO_STORAGE, WIFI_LOST, STORAGE_ERROR, EXPOSE_TIME_SEL
+		CAM_ERROR, NO_STORAGE, WIFI_LOST, STORAGE_ERROR, EXPOSE_TIME_SEL, EXPOSE_TIME_SET
 	};
 
-	private final CharSequence exposeTimeList[]={"2秒", "4秒", "8秒", "16秒", "32秒", "64秒", "128秒", "256秒"};
-	
+	private final CharSequence exposeTimeList[] = { "手动设置", "2秒", "4秒", "8秒",
+			"16秒", "32秒", "64秒", "128秒", "256秒" };
+
 	SharedPreferences spMain;
-	
-	
+	SensorManager mSensorManager;
+	AccuracyListener mAccuracyListener;
+
 	public Dialog sysFaultAlert(String title, String desc, final boolean exit)
 	{
-		return new AlertDialog.Builder(this).setTitle("哎呀 " + title + "粗问题了")
+		return new AlertDialog.Builder(this)
+				.setTitle("哎呀 " + title + "粗问题了")
 				.setMessage(desc + "!" + (exit ? ",点击\"确定\"退出程序..." : ""))
-				.setPositiveButton(R.string.alert_dialog_ok, new DialogInterface.OnClickListener()
-				{
-					public void onClick(DialogInterface dialog, int whichButton)
-					{
-						if (exit)
+				.setPositiveButton(R.string.alert_dialog_ok,
+						new DialogInterface.OnClickListener()
 						{
-							MainActivityIPC.this.finish();
-						}
-					}
-				}).create();
+							public void onClick(DialogInterface dialog,
+									int whichButton)
+							{
+								if (exit)
+								{
+									MainActivityIPC.this.finish();
+								}
+							}
+						}).create();
 	}
 
 	@Override
@@ -190,43 +200,115 @@ public class MainActivityIPC extends Activity
 		DLG dlg = DLG.values()[dlgId];
 		switch (dlg)
 		{
-			case CAM_ERROR:
-			{
-				return sysFaultAlert("相机", "无法打开摄像头", true);
-			}
-			case NO_STORAGE:
-			{
-				return sysFaultAlert("存储器", "SD卡不存在或未挂载", true);
-			}
-			case WIFI_LOST:
-			{
-				return sysFaultAlert("WIFI", "WIFI未连接", true);
-			}
-			case STORAGE_ERROR:
-			{
-				return sysFaultAlert("存储器", "SD卡文件系统出错或或未连接", true);
-			}
-			
-			case EXPOSE_TIME_SEL:
-			{
-	            return new AlertDialog.Builder(this)
-	            .setTitle("选择曝光时间")
-	            .setItems(exposeTimeList, new DialogInterface.OnClickListener() {
-	                public void onClick(DialogInterface dialog, int whichButton) {
-	
-	                    /* User clicked on a radio button do some stuff */
-	        			Log.i(LOG_TAG, "whichButton:"+whichButton);
-	        			
-	            		Editor editor = spMain.edit();
-	                    editor.putInt("exposeTime", whichButton);
-	                    editor.commit();
-	                    
-	                    setExposeTimDisp();
-	                }
-	            })
-	           .create();
-			}
-	
+		case CAM_ERROR:
+		{
+			return sysFaultAlert("相机", "无法打开摄像头", true);
+		}
+		case NO_STORAGE:
+		{
+			return sysFaultAlert("存储器", "SD卡不存在或未挂载", true);
+		}
+		case WIFI_LOST:
+		{
+			return sysFaultAlert("WIFI", "WIFI未连接", false);
+		}
+		case STORAGE_ERROR:
+		{
+			return sysFaultAlert("存储器", "SD卡文件系统出错或或未连接", true);
+		}
+
+		case EXPOSE_TIME_SEL:
+		{
+			return new AlertDialog.Builder(this)
+					.setTitle("选择曝光时间")
+					.setItems(exposeTimeList,
+							new DialogInterface.OnClickListener()
+							{
+								public void onClick(DialogInterface dialog,
+										int whichButton)
+								{
+
+									/* User clicked on a radio button do some stuff */
+									Log.i(LOG_TAG, "whichButton:" + whichButton);
+
+									if (whichButton == 0)
+									{
+										showDialog(DLG.EXPOSE_TIME_SET
+												.ordinal());
+									} else
+									{
+										int exposeTime = 2 << (whichButton - 1);
+
+										Editor editor = spMain.edit();
+										editor.putInt("exposeTime", exposeTime);
+										editor.commit();
+
+										setExposeTimDisp();
+									}
+								}
+							}).create();
+		}
+
+		case EXPOSE_TIME_SET:
+		{
+			LayoutInflater factory = LayoutInflater.from(this);
+			final View textEntryView = factory.inflate(
+					R.layout.dialog_set_expose_time, null);
+			return new AlertDialog.Builder(this)
+					.setTitle("设置曝光时间")
+					.setView(textEntryView)
+					.setPositiveButton(R.string.alert_dialog_ok,
+							new DialogInterface.OnClickListener()
+							{
+								public void onClick(DialogInterface dialog,
+										int whichButton)
+								{
+									TextView tvSetExpose = (TextView) textEntryView
+											.findViewById(R.id.editTextExpose);
+									int time = Integer.parseInt(tvSetExpose
+											.getText().toString());
+
+									RadioGroup rgTime = (RadioGroup) textEntryView
+											.findViewById(R.id.radioGroupExpose);
+
+									switch (rgTime.getCheckedRadioButtonId())
+									{
+									case R.id.radioExposeHour:
+									{
+										time *= 3600;
+										break;
+									}
+									case R.id.radioExposeMinute:
+									{
+										time *= 60;
+										break;
+									}
+									}
+
+									Log.i(LOG_TAG, "Set Expose Time " + time);
+
+									// 2^23/30
+									if (time < 279620)
+									{
+										Editor editor = spMain.edit();
+										editor.putInt("exposeTime", time);
+										editor.commit();
+
+										setExposeTimDisp();
+									}
+								}
+							})
+					.setNegativeButton(R.string.alert_dialog_cancel,
+							new DialogInterface.OnClickListener()
+							{
+								public void onClick(DialogInterface dialog,
+										int whichButton)
+								{
+
+								}
+							}).create();
+		}
+
 		}
 		return null;
 	}
@@ -247,17 +329,17 @@ public class MainActivityIPC extends Activity
 		if (wifi == null)
 		{
 			showDialog(DLG.WIFI_LOST.ordinal());
-			return;
+		} else
+		{
+			tvIp = (TextView) findViewById(R.id.tvIp);
+			tvIp.setText(wifi.ipStr + ":" + HTTP_PORT + "   " + wifi.macStr);
 		}
-
-		tvIp = (TextView) findViewById(R.id.tvIp);
-		tvIp.setText(wifi.ipStr + ":" + HTTP_PORT + "   " + wifi.macStr);
 
 		tvLoginMsg = (TextView) findViewById(R.id.textViewMainLoginMsg);
 
-		tvExposeTim=(TextView)findViewById(R.id.textViewExposeTim);
-		
-		if(camInit())
+		tvExposeTim = (TextView) findViewById(R.id.textViewExposeTim);
+
+		if (camInit())
 		{
 			fpsCalc = new cFpsCalc();
 
@@ -274,31 +356,90 @@ public class MainActivityIPC extends Activity
 					mMsgHld.sendMessage(mainMsg);
 				}
 			}, FPS_INTVAL, FPS_INTVAL);
-			
+
 			viewListenerInit();
-			
+
 			httpServerInit();
-	
+
 			httpDdnsClient = new HttpDdnsClient();
-			
-			spMain=getSharedPreferences("spMain", 0);
+
+			spMain = getSharedPreferences("spMain", 0);
 			setExposeTimDisp();
-			slowExposeState=SE_IDLE;
-			exposeTimRunnable=new ExposeTimRunnable();
+			slowExposeState = SE_IDLE;
+			exposeTimRunnable = new ExposeTimRunnable();
 			new Thread(exposeTimRunnable).start();
+
+			mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+			mAccuracyListener = new AccuracyListener();
 		}
+	}
+
+	private class AccuracyListener implements SensorEventListener
+	{
+		float[] accValue;
+		String[] sensorStr={"x", "y", "z"};
+		
+		final int ACC_FLT=100;
+		int accCnt;
+		
+		public AccuracyListener()
+		{
+			accValue=new float[3];
+			accCnt=0;
+		}
+		
+		@Override
+		public void onSensorChanged(SensorEvent event)
+		{
+			// TODO Auto-generated method stub
+			synchronized (this)
+			{
+				if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER)
+				{
+					for (int i = 0; i < 3; i++)
+					{
+						accValue[i]+=event.values[i];
+					}
+					
+					accCnt++;
+					if(accCnt==ACC_FLT)
+					{
+						for (int i = 0; i < 3; i++)
+						{
+							accValue[i]/=ACC_FLT;
+							Log.i(LOG_TAG, sensorStr[i]+" "+accValue[i]);
+							accValue[i]=0;
+						}
+						accCnt=0;
+					}
+					
+				}
+			}
+
+		}
+
+		public void onAccuracyChanged(Sensor sensor, int accuracy)
+		{
+			Log.i(LOG_TAG, "getVendor " + sensor.getVendor());
+			Log.i(LOG_TAG, "getName " + sensor.getName());
+			Log.i(LOG_TAG, "getPower " + sensor.getPower());
+			Log.i(LOG_TAG, "getType " + sensor.getType());
+			Log.i(LOG_TAG, "accuracy " + accuracy);
+
+		}
+
 	}
 
 	private class ExposeTimRunnable extends Thread
 	{
 		public void run()
 		{
-			while(slowExposeState==SE_EXPOSING)
+			while (slowExposeState == SE_EXPOSING)
 			{
 				Message mainMsg = new Message();
 				mainMsg.what = MSG_EXPOSE_TIM;
 				mMsgHld.sendMessage(mainMsg);
-				
+
 				try
 				{
 					sleep(EXPOSE_TIM_INTVAL);
@@ -309,65 +450,66 @@ public class MainActivityIPC extends Activity
 			}
 		}
 	}
-	
+
 	private void setExposeTimDisp()
 	{
-		btSlowExpose.setText((2<<spMain.getInt("exposeTime", 0))+"s "+getString(R.string.slowExpose));
+		btSlowExpose.setText(spMain.getInt("exposeTime", 2) + "s "
+				+ getString(R.string.slowExpose));
 	}
-	
+
 	private synchronized byte[] getOrAddNv21Buf(byte[] srcData, boolean isRead)
 	{
-		if(isRead)
+		if (isRead)
 		{
-			byte[] nv21=new byte[slowExposeBuf.length];
-			for(int i=0; i<nv21.length; i++)
+			byte[] nv21 = new byte[slowExposeBuf.length];
+			for (int i = 0; i < nv21.length; i++)
 			{
-				nv21[i]=(byte) (slowExposeBuf[i]/slowExposeFrameCnt);
+				nv21[i] = (byte) (slowExposeBuf[i] / slowExposeFrameCnt);
 			}
-			slowExposeBuf=null;
+			slowExposeBuf = null;
 			return nv21;
 		}
-		
 
-		for(int i=0; i<srcData.length; i++)
+		for (int i = 0; i < srcData.length; i++)
 		{
-			int unsignedByte=srcData[i]&0x0FF;
-			
-			slowExposeBuf[i]+=unsignedByte;
+			int unsignedByte = srcData[i] & 0x0FF;
+
+			slowExposeBuf[i] += unsignedByte;
 		}
 		slowExposeFrameCnt++;
-		
+
 		return null;
 	}
-	
+
 	private Bitmap slowExposeConvert()
 	{
 
-		Log.i(LOG_TAG, "slowExposeFrameCnt:"+slowExposeFrameCnt);
-		
-		byte[] nv21=getOrAddNv21Buf(null, true);
-		
-		ByteArrayOutputStream jpgStream=new ByteArrayOutputStream();
-		
-		YuvImage yuv=new YuvImage(nv21, ImageFormat.NV21, 
+		Log.i(LOG_TAG, "slowExposeFrameCnt:" + slowExposeFrameCnt);
+
+		byte[] nv21 = getOrAddNv21Buf(null, true);
+
+		ByteArrayOutputStream jpgStream = new ByteArrayOutputStream();
+
+		YuvImage yuv = new YuvImage(nv21, ImageFormat.NV21,
 				mCamView.prevSize.width, mCamView.prevSize.height, null);
+
 		try
 		{
 			jpgStream.reset();
-			long tim=System.currentTimeMillis();
-			yuv.compressToJpeg(new Rect(0, 0, mCamView.prevSize.width, mCamView.prevSize.height),
-                    100, jpgStream);
-			
-			tim=System.currentTimeMillis()-tim;
-			Log.i(LOG_TAG, "compressToJpeg time:"+tim+"ms size:"+
-					jpgStream.size()+" "+(jpgStream.size()/1024)+"KB");
-		}catch(Exception e)
+			long tim = System.currentTimeMillis();
+			yuv.compressToJpeg(new Rect(0, 0, mCamView.prevSize.width,
+					mCamView.prevSize.height), 80, jpgStream);
+
+			tim = System.currentTimeMillis() - tim;
+			Log.i(LOG_TAG, "compressToJpeg time:" + tim + "ms size:"
+					+ jpgStream.size() + " " + (jpgStream.size() / 1024) + "KB");
+		} catch (Exception e)
 		{
 			e.printStackTrace();
 		}
-		
-		byte[] jpgArray=jpgStream.toByteArray();
-		
+
+		byte[] jpgArray = jpgStream.toByteArray();
+
 		/*
 		File appDir = getAppDir();
 		if (appDir != null)
@@ -388,51 +530,51 @@ public class MainActivityIPC extends Activity
 			}
 		}
 		*/
-		
-		InputStream is=new ByteArrayInputStream(jpgArray);
+
+		InputStream is = new ByteArrayInputStream(jpgArray);
 		return BitmapFactory.decodeStream(is);
 	}
-	
-	
-	public static Bitmap zoomBmp(Bitmap bm, int newWidth ,int newHeight)
-	{
-	   // 获得图片的宽高
-	   int width = bm.getWidth();
-	   int height = bm.getHeight();
-	   // 计算缩放比例
-	   float scaleWidth = ((float) newWidth) / width;
-	   float scaleHeight = ((float) newHeight) / height;
-	   // 取得想要缩放的matrix参数
-	   Matrix matrix = new Matrix();
-	   matrix.postScale(scaleWidth, scaleHeight);
-	   // 得到新的图片
 
-	   return Bitmap.createBitmap(bm, 0, 0, width, height, matrix, true);
+	public static Bitmap bmpProc(Bitmap srcBmp, int newWidth, int newHeight,
+			int ortation)
+	{
+		// 获得图片的宽高
+		int width = srcBmp.getWidth();
+		int height = srcBmp.getHeight();
+		// 计算缩放比例
+		float scaleWidth = ((float) newWidth) / width;
+		float scaleHeight = ((float) newHeight) / height;
+		// 取得想要缩放的matrix参数
+		Matrix matrix = new Matrix();
+		matrix.postScale(scaleWidth, scaleHeight);
+		matrix.postRotate(ortation);
+		// 得到新的图片
+
+		return Bitmap.createBitmap(srcBmp, 0, 0, width, height, matrix, true);
 	}
-	
+
 	private void stopSlowExpose()
 	{
-		
-		Bitmap bmp=slowExposeConvert();
-		if(bmp!=null)
+		Bitmap bmp = slowExposeConvert();
+		if (bmp != null)
 		{
-			slowExposeState=SE_DISPLAY;
-			
-			camMask.drawBitmap(zoomBmp(bmp, mCamView.prevDispWidth, mCamView.prevDispHeight),
-					mCamView.prevDispWidth, mCamView.prevDispHeight);
+			slowExposeState = SE_DISPLAY;
 
-		}
-		else
+			camMask.drawBitmap(
+					bmpProc(bmp, mCamView.prevDispWidth,
+							mCamView.prevDispHeight, mCamView.camOrientation),
+					mCamView.prevDispWidth, mCamView.prevDispHeight);
+		} else
 		{
-			slowExposeState=SE_IDLE;
+			slowExposeState = SE_IDLE;
 		}
-			
+
 		setExposeTimDisp();
 
 		btSlowExpose.setEnabled(false);
 		tvExposeTim.setText("");
 	}
-	
+
 	protected void onStart()
 	{
 		super.onStart();
@@ -444,10 +586,14 @@ public class MainActivityIPC extends Activity
 		super.onResume();
 		Log.i(LOG_TAG, "onResume");
 
-		if(httpDdnsClient!=null)
+		if (httpDdnsClient != null)
 		{
 			httpDdnsClient.setMsgHandler(mMsgHld);
 		}
+
+		mSensorManager.registerListener(mAccuracyListener,
+				mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
+				SensorManager.SENSOR_DELAY_FASTEST);
 	}
 
 	protected void onPause()
@@ -459,8 +605,9 @@ public class MainActivityIPC extends Activity
 
 	protected void onStop()
 	{
-		super.onStop();
 		Log.i(LOG_TAG, "onStop");
+		mSensorManager.unregisterListener(mAccuracyListener);
+		super.onStop();
 	}
 
 	protected void onDestroy()
@@ -563,18 +710,17 @@ public class MainActivityIPC extends Activity
 				tvLoginMsg.setText("登录失败，无法连接服务器！");
 				break;
 			}
-			
+
 			case MSG_EXPOSE_TIM:
 			{
-				tvExposeTim.setText(String.valueOf(slowExposeTim));
+				tvExposeTim.setText(String.valueOf(slowExposeTimer));
 
-				Log.i(LOG_TAG, "Slow Expose "+slowExposeTim);
-				
-				if(slowExposeTim!=0)
+				Log.i(LOG_TAG, "Slow Expose " + slowExposeTimer);
+
+				if (slowExposeTimer != 0)
 				{
-					slowExposeTim--;
-				}
-				else
+					slowExposeTimer--;
+				} else
 				{
 					stopSlowExpose();
 				}
@@ -593,23 +739,24 @@ public class MainActivityIPC extends Activity
 	{
 		FrameLayout framePreview = (FrameLayout) findViewById(R.id.frameViewCam);
 
-		mCamView = new CamView(this, new CamPreviewCB(), 
-				getWindowManager().getDefaultDisplay());
+		mCamView = new CamView(this, new CamPreviewCB(), getWindowManager()
+				.getDefaultDisplay());
 		if (mCamView.mCamera == null)
 		{
 			showDialog(DLG.CAM_ERROR.ordinal());
 			return false;
 		}
 		framePreview.addView(mCamView);
-		
-		camMask=new SurfaceMask(this, mCamView.prevDispWidth, mCamView.prevDispHeight);
+
+		camMask = new SurfaceMask(this, mCamView.prevDispWidth,
+				mCamView.prevDispHeight);
 		framePreview.addView(camMask);
-		
-		//camMask.setVisibility(View.INVISIBLE);
-		
+
+		// camMask.setVisibility(View.INVISIBLE);
+
 		return true;
 	}
-	
+
 	private void viewListenerInit()
 	{
 
@@ -617,16 +764,15 @@ public class MainActivityIPC extends Activity
 		{
 			public void onClick(View v)
 			{
-				if(slowExposeState==SE_DISPLAY)
+				if (slowExposeState == SE_DISPLAY)
 				{
-					slowExposeState=SE_IDLE;
+					slowExposeState = SE_IDLE;
 					camMask.setVisibility(View.INVISIBLE);
 
 					btExposeTime.setEnabled(true);
 					btSwitchCam.setEnabled(true);
 					btSlowExpose.setEnabled(true);
-				}
-				else
+				} else
 				{
 					mCamView.mCamera.autoFocus(null);
 				}
@@ -689,56 +835,68 @@ public class MainActivityIPC extends Activity
 			}
 		});
 
-		btSwitchCam=(Button)findViewById(R.id.buttonSwitchCam);
+		btSwitchCam = (Button) findViewById(R.id.buttonSwitchCam);
 		btSwitchCam.setOnClickListener(new View.OnClickListener()
 		{
-			
+
 			@Override
 			public void onClick(View v)
 			{
 				mCamView.switchCam();
 			}
 		});
-		
-		btSlowExpose=(Button)findViewById(R.id.buttonSlowExpose);
-		btSlowExpose.setOnClickListener(new View.OnClickListener()
+
+		btRotationCam = (Button) findViewById(R.id.buttonRotationCam);
+		btRotationCam.setOnClickListener(new View.OnClickListener()
 		{
-			
+
 			@Override
 			public void onClick(View v)
 			{
-				//开始拍照
-				if(slowExposeState==SE_IDLE)
+				// TODO Auto-generated method stub
+				mCamView.rotationCam();
+			}
+		});
+
+		btSlowExpose = (Button) findViewById(R.id.buttonSlowExpose);
+		btSlowExpose.setOnClickListener(new View.OnClickListener()
+		{
+
+			@Override
+			public void onClick(View v)
+			{
+				// 开始拍照
+				if (slowExposeState == SE_IDLE)
 				{
-					slowExposeState=SE_EXPOSING;
+					slowExposeState = SE_EXPOSING;
 					btSlowExpose.setText(getString(R.string.stopSlowExpose));
 
-					slowExposeTim=2<<spMain.getInt("exposeTime", 0);
-					slowExposeFrameCnt=0;
+					slowExposeTimer = spMain.getInt("exposeTime", 2);
+					slowExposeFrameCnt = 0;
 					new Thread(exposeTimRunnable).start();
-					
+
 					btExposeTime.setEnabled(false);
 					btSwitchCam.setEnabled(false);
 				}
-				//停止拍照
-				else if(slowExposeState==SE_EXPOSING)
+				// 停止拍照
+				else if (slowExposeState == SE_EXPOSING)
 				{
 					stopSlowExpose();
 				}
 			}
 		});
-		
-		btExposeTime=(Button)findViewById(R.id.buttonExposeTime);
+
+		btExposeTime = (Button) findViewById(R.id.buttonExposeTime);
 		btExposeTime.setOnClickListener(new View.OnClickListener()
 		{
-			
+
 			@Override
 			public void onClick(View v)
 			{
 				showDialog(DLG.EXPOSE_TIME_SEL.ordinal());
 			}
 		});
-		
+
 	}
 
 	public class CamPreviewCB implements Camera.PreviewCallback
@@ -761,16 +919,16 @@ public class MainActivityIPC extends Activity
 				httpSvr.synImg.setImgData(data, mCamView.prevSize.width,
 						mCamView.prevSize.height);
 			}
-			
-			if(slowExposeState==SE_EXPOSING)
+
+			if (slowExposeState == SE_EXPOSING)
 			{
-				if(slowExposeBuf==null)
+				if (slowExposeBuf == null)
 				{
-					slowExposeBuf=new int[data.length];
+					slowExposeBuf = new int[data.length];
 				}
-				
+
 				getOrAddNv21Buf(data, false);
-				
+
 			}
 		}
 	}
@@ -953,21 +1111,21 @@ public class MainActivityIPC extends Activity
 class SurfaceMask extends SurfaceView implements SurfaceHolder.Callback
 {
 	SurfaceHolder hld;
-	
+
 	int maskWidth;
 	int maskHeight;
-	
-	final String LOG_TAG="SurfaceMask";
+
+	final String LOG_TAG = "SurfaceMask";
 
 	public SurfaceMask(Context context, int width, int height)
 	{
 		super(context);
 		// TODO Auto-generated constructor stub
-		
-		maskWidth=width;
-		maskHeight=height;
-		
-		hld=this.getHolder();
+
+		maskWidth = width;
+		maskHeight = height;
+
+		hld = this.getHolder();
 		hld.addCallback(this);
 		this.setZOrderOnTop(true);
 	}
@@ -975,20 +1133,22 @@ class SurfaceMask extends SurfaceView implements SurfaceHolder.Callback
 	void drawBitmap(Bitmap bmp, int dispWidth, int dispHeight)
 	{
 		this.setVisibility(View.VISIBLE);
-		Log.i(LOG_TAG, "drawBitmap "+dispWidth+" "+dispHeight);
+		Log.i(LOG_TAG, "drawBitmap " + dispWidth + " " + dispHeight);
 		this.setLayoutParams(new FrameLayout.LayoutParams(dispWidth, dispHeight));
 		hld.setFixedSize(dispWidth, dispHeight);
-		
-		Canvas camMaskCvs=hld.lockCanvas();
+
+		Canvas camMaskCvs = hld.lockCanvas();
 		camMaskCvs.drawBitmap(bmp, 0, 0, null);
 		hld.unlockCanvasAndPost(camMaskCvs);
-		
+
 	}
-	
+
 	@Override
-	public void surfaceChanged(SurfaceHolder holder, int format, int width, int height)
+	public void surfaceChanged(SurfaceHolder holder, int format, int width,
+			int height)
 	{
-		Log.i(LOG_TAG, "SurfaceMask Changed width:"+width+" height:"+height);
+		Log.i(LOG_TAG, "SurfaceMask Changed width:" + width + " height:"
+				+ height);
 	}
 
 	@Override
@@ -998,7 +1158,7 @@ class SurfaceMask extends SurfaceView implements SurfaceHolder.Callback
 		this.setLayoutParams(new FrameLayout.LayoutParams(maskWidth, maskHeight));
 		hld.setFixedSize(maskWidth, maskHeight);
 
-		//this.setVisibility(View.INVISIBLE);
+		// this.setVisibility(View.INVISIBLE);
 	}
 
 	@Override
@@ -1006,7 +1166,7 @@ class SurfaceMask extends SurfaceView implements SurfaceHolder.Callback
 	{
 		Log.i(LOG_TAG, "SurfaceMask Destroyed");
 	}
-	
+
 }
 
 class CamView extends SurfaceView implements SurfaceHolder.Callback
@@ -1015,63 +1175,91 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	MediaRecorder mMediaRec;
 
 	CamPreviewCB previewCallBack;
-	
-	SharedPreferences spCamOpened;
-	
+
+	SharedPreferences spCam;
+
 	Display Container;
-	
+
 	int prevDispWidth;
 	int prevDispHeight;
 
 	Camera mCamera;
 	Camera.Size picSize;
 	Camera.Size prevSize;
-	
+
 	int camIndex;
+	int camOrientation;
 
 	private static final String LOG_TAG = "CamView";
 
 	CamView(Context context, CamPreviewCB camPreviewCB, Display camContainer)
 	{
 		super(context);
-		
+
 		previewCallBack = camPreviewCB;
-		Container=camContainer;
-		
-        spCamOpened = context.getSharedPreferences("spCamOpened", 0);
-        camIndex=spCamOpened.getInt("camIndex", 0);
-        
+		Container = camContainer;
+
+		spCam = context.getSharedPreferences("spCam", 0);
+		camIndex = spCam.getInt("camIndex", 0);
+		camOrientation = spCam.getInt("camRotation" + camIndex, 0);
+
 		mHolder = this.getHolder();
 		mHolder.addCallback(this);
 		mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
-        
+
 		openCamera(camIndex);
 	}
-	
+
 	public void switchCam()
 	{
 		closeCamera();
-		
-		if(camIndex<(Camera.getNumberOfCameras()-1))
+
+		if (camIndex < (Camera.getNumberOfCameras() - 1))
 		{
 			camIndex++;
-		}
-		else
+		} else
 		{
-			camIndex=0;
+			camIndex = 0;
 		}
-		
-		if(!openCamera(camIndex))
+
+		if (!openCamera(camIndex))
 		{
-			camIndex=0;
+			camIndex = 0;
 			openCamera(0);
 		}
 
-		Editor editor = spCamOpened.edit();
-        editor.putInt("camIndex", camIndex);
-        editor.commit();
-        
-        StartPreview();
+		Editor editor = spCam.edit();
+		editor.putInt("camIndex", camIndex);
+		editor.commit();
+
+		StartPreview();
+	}
+
+	public void rotationCam()
+	{
+		if ((mCamera != null) && (mMediaRec == null))
+		{
+			mCamera.stopPreview();
+
+			String camRotationIndex = "camRotation" + camIndex;
+
+			camOrientation = spCam.getInt(camRotationIndex, 0);
+			camOrientation += 90;
+			camOrientation %= 360;
+
+			Editor editor = spCam.edit();
+			editor.putInt(camRotationIndex, camOrientation);
+			editor.commit();
+
+			mCamera.setDisplayOrientation(camOrientation);
+
+			Camera.Parameters parameters = mCamera.getParameters();
+			parameters.setRotation(camOrientation);
+			mCamera.setParameters(parameters);
+
+			mCamera.setPreviewCallback(previewCallBack);
+			mCamera.startPreview();
+		}
 	}
 
 	public void StartPreview()
@@ -1086,7 +1274,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		mCamera.setPreviewCallback(previewCallBack);
 		mCamera.startPreview();
 	}
-	
+
 	public boolean openCamera(int cam)
 	{
 		mCamera = Camera.open(cam);
@@ -1094,15 +1282,15 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		{
 			return false;
 		}
-		
+
 		Camera.Parameters parameters = mCamera.getParameters();
-		
-		Log.i(LOG_TAG,"HorizontalViewAngle:"+parameters.getHorizontalViewAngle());
-		Log.i(LOG_TAG,"VerticalViewAngle:"+parameters.getVerticalViewAngle());
+
+		Log.i(LOG_TAG,
+				"HorizontalViewAngle:" + parameters.getHorizontalViewAngle());
+		Log.i(LOG_TAG, "VerticalViewAngle:" + parameters.getVerticalViewAngle());
 
 		// 查找最大预览尺寸
-		List<Camera.Size> PreviewSizes = parameters
-				.getSupportedPreviewSizes();
+		List<Camera.Size> PreviewSizes = parameters.getSupportedPreviewSizes();
 		prevSize = PreviewSizes.get(0);
 		for (int i = 0; i < PreviewSizes.size(); i++)
 		{
@@ -1119,14 +1307,12 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		// "width:"+prevSize.width+" height:"+prevSize.height);
 
 		// 查找与最大预览尺寸最接近的照片尺寸
-		List<Camera.Size> PictureSizes = parameters
-				.getSupportedPictureSizes();
+		List<Camera.Size> PictureSizes = parameters.getSupportedPictureSizes();
 		picSize = PictureSizes.get(0);
 		int widDiff = Math.abs(picSize.width - prevSize.width);
 		for (int i = 0; i < PictureSizes.size(); i++)
 		{
-			int curDiff = Math.abs(PictureSizes.get(i).width
-					- prevSize.width);
+			int curDiff = Math.abs(PictureSizes.get(i).width - prevSize.width);
 			if (widDiff > curDiff)
 			{
 				picSize.width = PictureSizes.get(i).width;
@@ -1145,27 +1331,31 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 		parameters.setPreviewSize(prevSize.width, prevSize.height);
 		parameters.setJpegQuality(100);
+
+		parameters.setRotation(camOrientation);
+
 		// parameters.get
 		mCamera.setParameters(parameters);
 
+		camOrientation = spCam.getInt("camRotation" + cam, 0);
+		mCamera.setDisplayOrientation(camOrientation);
+
 		Log.i(LOG_TAG,
 				"screen:" + Container.getWidth() + " " + Container.getHeight());
-		Log.i(LOG_TAG, "mCamView:" + prevSize.width + " "
-				+ prevSize.height);
+		Log.i(LOG_TAG, "mCamView:" + prevSize.width + " " + prevSize.height);
 
-		prevDispWidth=prevSize.width * Container.getHeight()/prevSize.height;
-		prevDispHeight=Container.getHeight();
+		prevDispWidth = prevSize.width * Container.getHeight()
+				/ prevSize.height;
+		prevDispHeight = Container.getHeight();
 
 		mHolder.setFixedSize(prevDispWidth, prevDispHeight);
-		
+
 		return true;
 	}
-	
+
 	public void closeCamera()
 	{
-		stopRec();
-
-		if (mCamera != null)
+		if ((mCamera != null) && (mMediaRec == null))
 		{
 			mCamera.setPreviewCallback(null);
 			mCamera.stopPreview();
@@ -1173,7 +1363,6 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			mCamera = null;
 		}
 	}
-	
 
 	private void releaseMediaRecorder()
 	{
@@ -1225,8 +1414,8 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 			return false;
 		} catch (IOException e)
 		{
-			Log.d(LOG_TAG,
-					"prepareRec IOException preparing MediaRecorder: " + e.getMessage());
+			Log.d(LOG_TAG, "prepareRec IOException preparing MediaRecorder: "
+					+ e.getMessage());
 			releaseMediaRecorder();
 			return false;
 		}
@@ -1292,7 +1481,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 	{
 		// Now that the size is known, set up the camera parameters and begin
 		// the preview.
-		Log.i(LOG_TAG, "surfaceChanged "+w+" "+h);
+		Log.i(LOG_TAG, "surfaceChanged " + w + " " + h);
 
 		if (mCamera != null)
 		{

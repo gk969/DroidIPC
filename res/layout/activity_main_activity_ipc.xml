@@ -97,4 +97,21 @@
         android:textAppearance="?android:attr/textAppearanceMedium"
         android:layout_below="@+id/tvFps"/>
 
+    <Button
+        android:id="@+id/buttonRotationCam"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentRight="true"
+        android:layout_below="@+id/buttonSwitchCam"
+        android:text="@string/rotationCam" />
+
+    <TextView
+        android:id="@+id/textViewAccSensor"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:textColor="#F00"
+        android:layout_below="@+id/buttonSlowExpose"
+        android:textAppearance="?android:attr/textAppearanceMedium" />
+
 </RelativeLayout>

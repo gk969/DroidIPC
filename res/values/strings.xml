@@ -10,6 +10,7 @@
     <string name="user">用户名</string>
     <string name="password">密码</string>
     <string name="switchCam">切换镜头</string>
+    <string name="rotationCam">旋转镜头</string>
     <string name="slowExpose">慢门拍照</string>
     <string name="exposeTime">曝光时间</string>
     <string name="alert_dialog_ok">确定</string>

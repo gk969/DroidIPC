@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent">
+
+    <TextView
+        android:id="@+id/textViewMaxExposeTips"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_centerHorizontal="true"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:text="最大77.6小时" />
+    
+    <EditText
+        android:id="@+id/editTextExpose"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/textViewMaxExposeTips"
+        android:layout_centerHorizontal="true"
+        android:ems="10"
+        android:inputType="numberDecimal" />
+
+    <RadioGroup
+        android:id="@+id/radioGroupExpose"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/editTextExpose"
+        android:layout_centerHorizontal="true"
+        android:orientation="horizontal" >
+
+        <RadioButton
+            android:id="@+id/radioExposeSecond"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="秒钟" />
+
+        <RadioButton
+            android:id="@+id/radioExposeMinute"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="分钟" />
+
+        <RadioButton
+            android:id="@+id/radioExposeHour"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="小时" />
+    </RadioGroup>
+
+
+</RelativeLayout>

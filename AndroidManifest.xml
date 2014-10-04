@@ -34,7 +34,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:name="com.droidipc.ActivityLogin"></activity>
+        <activity 
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" 
+        	android:screenOrientation="landscape"
+            android:name="com.droidipc.ActivityLogin">
+        </activity>
     </application>
 
 </manifest>
