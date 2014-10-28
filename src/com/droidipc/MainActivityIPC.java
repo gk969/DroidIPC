@@ -206,7 +206,7 @@ public class MainActivityIPC extends Activity
 		}
 		case NO_STORAGE:
 		{
-			return sysFaultAlert("存储器", "SD卡不存在或未挂载", true);
+			return sysFaultAlert("存储器", "SD卡不存在或未挂载", false);
 		}
 		case WIFI_LOST:
 		{
@@ -214,7 +214,7 @@ public class MainActivityIPC extends Activity
 		}
 		case STORAGE_ERROR:
 		{
-			return sysFaultAlert("存储器", "SD卡文件系统出错或或未连接", true);
+			return sysFaultAlert("存储器", "SD卡文件系统出错或或未连接", false);
 		}
 
 		case EXPOSE_TIME_SEL:

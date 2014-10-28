@@ -154,6 +154,28 @@ public class HttpDdnsClient
 					Map<String, List<String>> header=urlConn.getHeaderFields();
 					List<String> cookie=header.get("Set-Cookie");
 					
+					//header.
+					
+					int i=0;
+					String headerStr=urlConn.getHeaderFieldKey(i);
+					
+					while(headerStr!=null)
+					{
+						Log.i(LOG_TAG, headerStr+":"+urlConn.getHeaderField(i));
+						
+						i++;
+						headerStr=urlConn.getHeaderFieldKey(i);
+					}
+					
+					
+					/*
+					for(int i=0; i<cookie.size(); i++)
+					{
+						Log.i(LOG_TAG, cookie.get(i));
+					}
+					*/
+					
+					//cookie.
 					cookieStr=cookie.toString();
 					Log.i(LOG_TAG, "cookie:"+cookieStr);
 					
