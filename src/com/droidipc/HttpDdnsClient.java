@@ -134,6 +134,8 @@ public class HttpDdnsClient
 			HttpURLConnection urlConn=(HttpURLConnection)url.openConnection();
 			
 			String postAuthStr="log="+userName+"&pwd="+passWord+"&wp-submit=%E7%99%BB%E5%BD%95&redirect_to=http%3A%2F%2Fgk969.com%2Fwp-admin%2F&testcookie=1";
+
+			Log.i(LOG_TAG, "postAuthStr:"+postAuthStr);
 			try
 			{
 				urlConn.setConnectTimeout(10000);
@@ -154,28 +156,6 @@ public class HttpDdnsClient
 					Map<String, List<String>> header=urlConn.getHeaderFields();
 					List<String> cookie=header.get("Set-Cookie");
 					
-					//header.
-					
-					int i=0;
-					String headerStr=urlConn.getHeaderFieldKey(i);
-					
-					while(headerStr!=null)
-					{
-						Log.i(LOG_TAG, headerStr+":"+urlConn.getHeaderField(i));
-						
-						i++;
-						headerStr=urlConn.getHeaderFieldKey(i);
-					}
-					
-					
-					/*
-					for(int i=0; i<cookie.size(); i++)
-					{
-						Log.i(LOG_TAG, cookie.get(i));
-					}
-					*/
-					
-					//cookie.
 					cookieStr=cookie.toString();
 					Log.i(LOG_TAG, "cookie:"+cookieStr);
 					
