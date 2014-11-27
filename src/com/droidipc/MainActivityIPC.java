@@ -91,6 +91,7 @@ import java.util.TimerTask;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import com.droidipc.ActivityLogin.DatabaseHelper;
 import com.droidipc.MainActivityIPC.CamPreviewCB;
 
 class cFpsCalc
@@ -175,6 +176,42 @@ public class MainActivityIPC extends Activity
 	SensorManager mSensorManager;
 	AccuracyListener mAccuracyListener;
 
+	
+	public static void ipcLogin(String user, String password, Handler msgHld)
+	{
+		httpDdnsClient.setAuth(user, password);
+		httpDdnsClient.setMsgHandler(msgHld);
+		httpDdnsClient.start();
+	}
+	
+
+    private void autoLogin()
+    {
+    	SQLiteDatabase db = null;
+		try
+		{
+			try
+			{
+				db=(new ActivityLogin.DatabaseHelper(getBaseContext())).getWritableDatabase();
+				Cursor cursor = db.rawQuery("select * from user", null);
+				if(cursor.moveToFirst())
+				{
+					ipcLogin(cursor.getString(cursor.getColumnIndex("name")), 
+							cursor.getString(cursor.getColumnIndex("password")),mMsgHld);
+				}
+				
+			}
+			finally
+			{
+				if(db!=null)db.close();
+			}
+		}
+		catch(SQLiteException e)
+		{
+			Log.i(LOG_TAG, e.toString());
+		}
+    }
+	
 	public Dialog sysFaultAlert(String title, String desc, final boolean exit)
 	{
 		return new AlertDialog.Builder(this)
@@ -362,7 +399,8 @@ public class MainActivityIPC extends Activity
 			httpServerInit();
 
 			httpDdnsClient = new HttpDdnsClient();
-
+			autoLogin();
+			
 			spMain = getSharedPreferences("spMain", 0);
 			setExposeTimDisp();
 			slowExposeState = SE_IDLE;
@@ -407,7 +445,7 @@ public class MainActivityIPC extends Activity
 						for (int i = 0; i < 3; i++)
 						{
 							accValue[i]/=ACC_FLT;
-							Log.i(LOG_TAG, sensorStr[i]+" "+accValue[i]);
+							//Log.i(LOG_TAG, sensorStr[i]+" "+accValue[i]);
 							accValue[i]=0;
 						}
 						accCnt=0;
@@ -491,14 +529,14 @@ public class MainActivityIPC extends Activity
 		ByteArrayOutputStream jpgStream = new ByteArrayOutputStream();
 
 		YuvImage yuv = new YuvImage(nv21, ImageFormat.NV21,
-				mCamView.prevSize.width, mCamView.prevSize.height, null);
+				mCamView.curPrevSize.width, mCamView.curPrevSize.height, null);
 
 		try
 		{
 			jpgStream.reset();
 			long tim = System.currentTimeMillis();
-			yuv.compressToJpeg(new Rect(0, 0, mCamView.prevSize.width,
-					mCamView.prevSize.height), 80, jpgStream);
+			yuv.compressToJpeg(new Rect(0, 0, mCamView.curPrevSize.width,
+					mCamView.curPrevSize.height), 80, jpgStream);
 
 			tim = System.currentTimeMillis() - tim;
 			Log.i(LOG_TAG, "compressToJpeg time:" + tim + "ms size:"
@@ -534,7 +572,7 @@ public class MainActivityIPC extends Activity
 		InputStream is = new ByteArrayInputStream(jpgArray);
 		return BitmapFactory.decodeStream(is);
 	}
-
+	
 	public static Bitmap bmpProc(Bitmap srcBmp, int newWidth, int newHeight,
 			int ortation)
 	{
@@ -549,7 +587,7 @@ public class MainActivityIPC extends Activity
 		matrix.postScale(scaleWidth, scaleHeight);
 		matrix.postRotate(ortation);
 		// 得到新的图片
-
+		
 		return Bitmap.createBitmap(srcBmp, 0, 0, width, height, matrix, true);
 	}
 
@@ -561,9 +599,9 @@ public class MainActivityIPC extends Activity
 			slowExposeState = SE_DISPLAY;
 
 			camMask.drawBitmap(
-					bmpProc(bmp, mCamView.prevDispWidth,
-							mCamView.prevDispHeight, mCamView.camOrientation),
-					mCamView.prevDispWidth, mCamView.prevDispHeight);
+					bmpProc(bmp, mCamView.prevWindowWidth,
+							mCamView.prevWindowHeight, mCamView.camOrientation),
+					mCamView.prevWindowWidth, mCamView.prevWindowHeight);
 		} else
 		{
 			slowExposeState = SE_IDLE;
@@ -573,6 +611,8 @@ public class MainActivityIPC extends Activity
 
 		btSlowExpose.setEnabled(false);
 		tvExposeTim.setText("");
+		
+		mCamView.changeCamPrevSize(mCamView.ipcSize);
 	}
 
 	protected void onStart()
@@ -748,8 +788,8 @@ public class MainActivityIPC extends Activity
 		}
 		framePreview.addView(mCamView);
 
-		camMask = new SurfaceMask(this, mCamView.prevDispWidth,
-				mCamView.prevDispHeight);
+		camMask = new SurfaceMask(this, mCamView.prevWindowWidth,
+				mCamView.prevWindowHeight);
 		framePreview.addView(camMask);
 
 		// camMask.setVisibility(View.INVISIBLE);
@@ -866,8 +906,13 @@ public class MainActivityIPC extends Activity
 			public void onClick(View v)
 			{
 				// 开始拍照
+				Log.i(LOG_TAG, "slowExposeState:"+slowExposeState);
 				if (slowExposeState == SE_IDLE)
 				{
+					Log.i(LOG_TAG, "mCamView.maxPrevSize width:"+mCamView.maxPrevSize.width+" height:"+mCamView.maxPrevSize.height);
+					mCamView.changeCamPrevSize(mCamView.maxPrevSize);
+
+					
 					slowExposeState = SE_EXPOSING;
 					btSlowExpose.setText(getString(R.string.stopSlowExpose));
 
@@ -877,10 +922,13 @@ public class MainActivityIPC extends Activity
 
 					btExposeTime.setEnabled(false);
 					btSwitchCam.setEnabled(false);
+					
+
 				}
 				// 停止拍照
 				else if (slowExposeState == SE_EXPOSING)
 				{
+					Log.i(LOG_TAG, "stopSlowExpose");
 					stopSlowExpose();
 				}
 			}
@@ -916,8 +964,7 @@ public class MainActivityIPC extends Activity
 
 			if (httpSvr != null)
 			{
-				httpSvr.synImg.setImgData(data, mCamView.prevSize.width,
-						mCamView.prevSize.height);
+				httpSvr.synImg.setImgData(data, mCamView.curPrevSize.width, mCamView.curPrevSize.height);
 			}
 
 			if (slowExposeState == SE_EXPOSING)
@@ -1180,15 +1227,20 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 	Display Container;
 
-	int prevDispWidth;
-	int prevDispHeight;
+	int prevWindowWidth;
+	int prevWindowHeight;
 
 	Camera mCamera;
 	Camera.Size picSize;
-	Camera.Size prevSize;
+	Camera.Size maxPrevSize;
+	Camera.Size curPrevSize;
+	Camera.Size ipcSize;
+	
 
 	int camIndex;
 	int camOrientation;
+	
+	final static int IPC_WIDTH=640;
 
 	private static final String LOG_TAG = "CamView";
 
@@ -1274,6 +1326,27 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		mCamera.setPreviewCallback(previewCallBack);
 		mCamera.startPreview();
 	}
+	
+	public void changeCamPrevSize(Camera.Size size)
+	{
+		Log.i(LOG_TAG, "changeCamPrevSize width:"+size.width+" height:"+size.height);
+		
+		mCamera.stopPreview();
+		Camera.Parameters mPara=mCamera.getParameters();
+		mPara.setPreviewSize(size.width, size.height);
+		mCamera.setParameters(mPara);
+		
+
+		prevWindowWidth = size.width * Container.getHeight()
+				/ size.height;
+		prevWindowHeight = Container.getHeight();
+
+		mHolder.setFixedSize(prevWindowWidth, prevWindowHeight);
+		
+		StartPreview();
+		
+		curPrevSize=size;
+	}
 
 	public boolean openCamera(int cam)
 	{
@@ -1291,28 +1364,27 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 
 		// 查找最大预览尺寸
 		List<Camera.Size> PreviewSizes = parameters.getSupportedPreviewSizes();
-		prevSize = PreviewSizes.get(0);
+		maxPrevSize = PreviewSizes.get(0);
 		for (int i = 0; i < PreviewSizes.size(); i++)
 		{
-			if (prevSize.width < PreviewSizes.get(i).width)
+			if (maxPrevSize.width < PreviewSizes.get(i).width)
 			{
-				prevSize.width = PreviewSizes.get(i).width;
-				prevSize.height = PreviewSizes.get(i).height;
+				maxPrevSize.width = PreviewSizes.get(i).width;
+				maxPrevSize.height = PreviewSizes.get(i).height;
 			}
 
 			Log.i(LOG_TAG, "PreviewSizes width:" + PreviewSizes.get(i).width
 					+ " height:" + PreviewSizes.get(i).height);
 		}
-		// Log.i("PreviewSizes",
-		// "width:"+prevSize.width+" height:"+prevSize.height);
+		Log.i(LOG_TAG, "maxPrevSize width:"+maxPrevSize.width+" height:"+maxPrevSize.height);
 
 		// 查找与最大预览尺寸最接近的照片尺寸
 		List<Camera.Size> PictureSizes = parameters.getSupportedPictureSizes();
 		picSize = PictureSizes.get(0);
-		int widDiff = Math.abs(picSize.width - prevSize.width);
+		int widDiff = Math.abs(picSize.width - maxPrevSize.width);
 		for (int i = 0; i < PictureSizes.size(); i++)
 		{
-			int curDiff = Math.abs(PictureSizes.get(i).width - prevSize.width);
+			int curDiff = Math.abs(PictureSizes.get(i).width - maxPrevSize.width);
 			if (widDiff > curDiff)
 			{
 				picSize.width = PictureSizes.get(i).width;
@@ -1326,10 +1398,30 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		Log.i(LOG_TAG, "PictureSizes Used width:" + picSize.width + " height:"
 				+ picSize.height);
 
+		//查找与宽度IPC_WIDTH相近的预览尺寸，作为IPC传输的默认尺寸。
+		PreviewSizes = parameters.getSupportedPreviewSizes();
+		ipcSize=PreviewSizes.get(0);
+		widDiff=Math.abs(picSize.width-IPC_WIDTH);
+		for(int i=0; i<PreviewSizes.size(); i++)
+		{
+			int curDiff=Math.abs(PreviewSizes.get(i).width-IPC_WIDTH);
+			if(widDiff>curDiff)
+			{
+				ipcSize.width=PreviewSizes.get(i).width;
+				ipcSize.height=PreviewSizes.get(i).height;
+				widDiff=curDiff;
+			}
+		}
+		Log.i(LOG_TAG, "IPC sizes Used width:"+ipcSize.width+" height:"+ipcSize.height);
+
+		Log.i(LOG_TAG, "maxPrevSize width:"+maxPrevSize.width+" height:"+maxPrevSize.height);
+		
+		curPrevSize=ipcSize;
+		
 		parameters.setPictureFormat(PixelFormat.JPEG);
 		parameters.setPictureSize(picSize.width, picSize.height);// (picSize.width,
 
-		parameters.setPreviewSize(prevSize.width, prevSize.height);
+		parameters.setPreviewSize(ipcSize.width, ipcSize.height);
 		parameters.setJpegQuality(100);
 
 		parameters.setRotation(camOrientation);
@@ -1340,16 +1432,17 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		camOrientation = spCam.getInt("camRotation" + cam, 0);
 		mCamera.setDisplayOrientation(camOrientation);
 
-		Log.i(LOG_TAG,
-				"screen:" + Container.getWidth() + " " + Container.getHeight());
-		Log.i(LOG_TAG, "mCamView:" + prevSize.width + " " + prevSize.height);
+		Log.i(LOG_TAG,"screenSize:" + Container.getWidth() + " " + Container.getHeight());
+		Log.i(LOG_TAG, "ipcSize:" + ipcSize.width + " " + ipcSize.height);
 
-		prevDispWidth = prevSize.width * Container.getHeight()
-				/ prevSize.height;
-		prevDispHeight = Container.getHeight();
+		prevWindowWidth = ipcSize.width * Container.getHeight()
+				/ ipcSize.height;
+		prevWindowHeight = Container.getHeight();
 
-		mHolder.setFixedSize(prevDispWidth, prevDispHeight);
+		mHolder.setFixedSize(prevWindowWidth, prevWindowHeight);
 
+		Log.i(LOG_TAG, "maxPrevSize width:"+maxPrevSize.width+" height:"+maxPrevSize.height);
+		
 		return true;
 	}
 
@@ -1395,7 +1488,7 @@ class CamView extends SurfaceView implements SurfaceHolder.Callback
 		mMediaRec.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
 		mMediaRec.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
 		mMediaRec.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-		mMediaRec.setVideoSize(prevSize.width, prevSize.height);
+		mMediaRec.setVideoSize(maxPrevSize.width, maxPrevSize.height);
 		mMediaRec.setVideoFrameRate(25);
 
 		mMediaRec.setOutputFile(vidFile.toString());

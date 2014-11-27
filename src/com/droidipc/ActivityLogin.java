@@ -109,15 +109,13 @@ public class ActivityLogin extends Activity
 				
 				user=textViewUser.getText().toString();
 				password=textViewPassword.getText().toString();
-				MainActivityIPC.httpDdnsClient.setAuth(user, password);
-				MainActivityIPC.httpDdnsClient.setMsgHandler(hldLoginMsg);
-				MainActivityIPC.httpDdnsClient.start();
+				MainActivityIPC.ipcLogin(user, password, hldLoginMsg);
 			}
 		});
     }
     
 
-	private class DatabaseHelper extends SQLiteOpenHelper
+	static class DatabaseHelper extends SQLiteOpenHelper
 	{
 		DatabaseHelper(Context context)
 		{

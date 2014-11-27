@@ -6,11 +6,14 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Properties;
 
 import com.droidipc.NanoHTTPD.Response;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
@@ -60,6 +63,8 @@ public class HttpServer extends NanoHTTPD
 {
     private File homeDir;
     final String LOG_TAG="HttpServer";
+    
+	final static int IPC_WIDTH=600;
 
     final int webIndexRawId=R.raw.index;
     final String webIndexFileName="index.html";
@@ -91,26 +96,30 @@ public class HttpServer extends NanoHTTPD
 		if(img==null)
 			return null;
 		
-		ByteArrayOutputStream imgStream=new ByteArrayOutputStream();
-		
 		YuvImage yuv=new YuvImage(img.data, ImageFormat.NV21, 
 								  img.width, img.height, null);
+		
+		ByteArrayOutputStream jpgStream = new ByteArrayOutputStream();
 		try
 		{
-			imgStream.reset();
-			long tim=System.currentTimeMillis();
-			yuv.compressToJpeg(new Rect(0, 0, img.width, img.height),
-                    60, imgStream);
-			
-			tim=System.currentTimeMillis()-tim;
-			Log.i(LOG_TAG, "compressToJpeg time:"+tim+"ms size:"+
-				  imgStream.size()+" "+(imgStream.size()/1024)+"KB");
-		}catch(Exception e)
+			jpgStream.reset();
+			yuv.compressToJpeg(new Rect(0, 0, yuv.getWidth(),
+					yuv.getHeight()), 40, jpgStream);
+		} catch (Exception e)
 		{
 			e.printStackTrace();
 		}
+
+		/*
+		byte[] jpgArray = jpgStream.toByteArray();
+		InputStream is = new ByteArrayInputStream(jpgArray);
+		Bitmap prevBmp=BitmapFactory.decodeStream(is);
+		Bitmap ipcBmp=MainActivityIPC.bmpProc(prevBmp, IPC_WIDTH, IPC_WIDTH*img.height/img.width, 0);
 		
-		return imgStream;
+		jpgStream.reset();
+		ipcBmp.compress(Bitmap.CompressFormat.JPEG, 60, jpgStream);
+		*/
+		return jpgStream;
 	}
 
 	@Override
