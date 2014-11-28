@@ -215,7 +215,7 @@ public class MainActivityIPC extends Activity
 	public Dialog sysFaultAlert(String title, String desc, final boolean exit)
 	{
 		return new AlertDialog.Builder(this)
-				.setTitle("哎呀 " + title + "粗问题了")
+				.setTitle("哎呀！" + title + "粗问题了")
 				.setMessage(desc + "!" + (exit ? ",点击\"确定\"退出程序..." : ""))
 				.setPositiveButton(R.string.alert_dialog_ok,
 						new DialogInterface.OnClickListener()
@@ -595,14 +595,6 @@ public class MainActivityIPC extends Activity
 		return Bitmap.createBitmap(srcBmp, 0, 0, width, height, matrix, true);
 	}
 
-	private void syncCamMaskSize()
-	{
-		LayoutParams camMaskPara=camMask.getLayoutParams();
-		camMaskPara.width=mCamView.prevWindowWidth;
-		camMaskPara.height=mCamView.prevWindowHeight;
-		camMask.setLayoutParams(camMaskPara);
-	}
-	
 	private void stopSlowExpose()
 	{
 		Bitmap bmp = slowExposeConvert();
@@ -894,7 +886,7 @@ public class MainActivityIPC extends Activity
 			public void onClick(View v)
 			{
 				mCamView.switchCam();
-				syncCamMaskSize();
+				camMask.setLayoutParams(new FrameLayout.LayoutParams(mCamView.prevWindowWidth, mCamView.prevWindowHeight));
 			}
 		});
 
